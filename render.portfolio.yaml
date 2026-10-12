@@ -1,0 +1,16 @@
+# Independent public demonstration. Never add the owner DATABASE_URL here.
+services:
+  - type: web
+    name: union-bakery-payroll-portfolio
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: sh scripts/run_portfolio.sh
+    healthCheckPath: /_stcore/health
+    autoDeployTrigger: off
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: BIND_ADDRESS
+        value: 0.0.0.0

@@ -1,131 +1,95 @@
-# Union Bakery 工资小管家
+# Union Bakery · Payroll Studio
 
-Python + Streamlit + PostgreSQL 的多门店工资工作台。已实现员工档案、按月带入员工、网页考勤编辑、核算保存、历史查询及明细导出。日常核算无需每月上传 Excel。
+A payroll workspace for a small bakery, developed through owner feedback: reusable employee records, monthly attendance, transparent calculations and versioned history.
 
-在线测试已部署，环境说明与验证结果见 [在线测试部署记录](docs/online-test-deployment.md)。
+**[中文项目说明](README.zh-CN.md)** · **[Architecture & case study](docs/portfolio-case-study.md)** · **[Product roadmap](docs/product-roadmap.md)**
 
-详细业务依据、公式及后续计划见 [需求与实施计划](docs/requirements-and-roadmap.md)。
+The English portfolio demo runs independently of the Chinese owner-testing environment. Both use the same tested Python calculation engine. The public demo contains fictional data only, isolates changes to each visitor’s session and never reads the owner database connection.
 
-第二阶段已将五张 PostgreSQL 表接入网页，并统一导航和页面样式。已准备独立的云端虚构数据测试环境；正式用户权限、确认锁定和个人工资条尚未完成。详见 [网页工作台实施报告](docs/web-workspace-report.md) 与 [本地数据库搭建进度](docs/database-progress.md)。
+![English portfolio workspace with fictional data](docs/portfolio-assets/english-workspace.png)
 
-[核算历史结构脚本](database/003_calculation_history.sql) 已应用。2026 年 10 月 12 日已完成实际保存及考勤修改后重算验证，详细结果见 [核算保存实施报告](docs/payroll-storage-report.md)。
+## What you can try
 
-最新改版采用店铺浅蓝与奶油黄风格，默认逐人填写考勤，并新增门店设置入口。见 [前端改版与部署准备](docs/union-ui-report.md) 和 [老板测试说明](docs/boss-test-guide.md)。
+- Maintain stores and employees, individually or in a batch table.
+- Start a pay month from regular pay; keep monthly snapshots independent of later salary changes.
+- Record absence, lateness, overtime and non-financial performance notes.
+- Save inputs separately, or save and calculate in one step.
+- Inspect component deductions, compare calculation versions and export English Excel detail.
+- Set a monthly payroll limit without displaying its amount in everyday views.
 
-## 启动与测试
+**Two-minute walkthrough:** in Monthly payroll, select Alex Baker. Change **Late minutes** from **7** to **10**, then click **Save & calculate**. Alex’s net pay changes from **CNY 5,263** to **CNY 5,260**. Calculation history preserves both versions. Use **Reset my demo** to start again.
 
-建议使用 Python 3.12 和独立虚拟环境。以下命令在项目目录运行：
+These are store-specific rules and CNY amounts, retained from the original requirements. An English interface does not make this a New Zealand payroll or tax-compliance product. No payment or email is sent.
+
+## Two environments, one calculation engine
+
+| | Chinese owner-testing app | English portfolio demo |
+|---|---|---|
+| Entry point | `app.py` | `portfolio_app.py` |
+| Storage | PostgreSQL on Neon | Per-session in-memory synthetic repository |
+| Hosting | Render, password-protected | Separate public Render service |
+| Persistence | Saved records survive reconnects | Refresh/reset starts a fresh demo |
+| Intended use | Owner acceptance testing with fictional data | Recruiter/portfolio exploration |
+| Calculation | `core/payroll_calc.py` | Same engine and rule version |
+
+```mermaid
+flowchart LR
+  Owner[Chinese test interface] --> Workspace[PostgreSQL workspace]
+  Workspace --> Engine[Shared Decimal payroll engine]
+  Workspace --> DB[(Neon PostgreSQL)]
+  Visitor[English portfolio interface] --> Demo[Isolated session repository]
+  Demo --> Engine
+  Demo --> Memory[(Fictional session data)]
+```
+
+The demo adapter is not a substitute for database integration testing. Transaction, constraint and concurrency behavior is tested separately against real PostgreSQL.
+
+## Run the English demo locally
+
+Python 3.12 is recommended. No database or credentials are needed.
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-sh scripts/run_local.sh
+sh scripts/run_portfolio.sh
 ```
 
+Open `http://127.0.0.1:18502`. The Chinese local app remains available through `sh scripts/run_local.sh`; see the [Chinese setup guide](README.zh-CN.md).
+
+## Tests
+
 ```sh
+# Engine, exports, public demo and UI tests; PostgreSQL-dependent tests skip.
 python -m unittest discover -s tests -v
+
+# Full regression suite against an existing local development database.
+TEST_DATABASE_URL='postgresql://localhost:5432/bakery_payroll_dev' \
+  python -m unittest discover -s tests -v
 ```
 
-保持 Postgres.app 运行。启动脚本默认连接本机 bakery_payroll_dev，页面地址为 http://127.0.0.1:18501；可用 DATABASE_URL 环境变量覆盖连接。数据库需已应用 001、002、003，现有开发库不要重复执行。依赖文件记录实际验证版本。普通测试会跳过数据库测试，完整命令见下文。
+Database integration tests use isolated schemas. Do not point this test command at a production database. The runtime app account deliberately lacks the schema-management privileges needed by those tests.
 
-## 使用流程
+## Repository map
 
-### 数据库草稿预览
+| Path | Responsibility |
+|---|---|
+| `core/payroll_calc.py` | Input validation, Decimal arithmetic, component rounding |
+| `core/workspace.py` | Employee records, monthly snapshots, atomic batch operations |
+| `core/payroll_storage.py` | Versioned calculations, current results and history |
+| `database/001…003*.sql` | Reproducible schema and migration scripts |
+| `views/`, `ui/` | Chinese operational interface |
+| `portfolio/app.py` | English interface and project walkthrough |
+| `portfolio/demo.py` | Bounded synthetic data isolated per visitor session |
+| `portfolio/domain.py` | English field labels, validation and Excel export |
+| `tests/` | Core behavior, PostgreSQL integration and Streamlit UI coverage |
+| `render.yaml` | Chinese owner-testing deployment reference |
+| `render.portfolio.yaml` | Independent English demo deployment reference |
 
-本机已建立项目专用 `.venv`（Python 3.12）并安装依赖。进入项目目录后，在普通终端执行以下命令；不要在 `psql` 的 `bakery_payroll_dev=#` 提示符后执行，先用 `\q` 退出 SQL 命令行。
+## Delivery and data handling
 
-```sh
-source .venv/bin/activate
-export DATABASE_URL='postgresql://localhost:5432/bakery_payroll_dev'
-python -m scripts.preview_database_payroll --store '测试面包店' --month 2026-10 --employee DEMO-001
-```
+The owner test app runs on Render with an independent Neon test database. SQL migrations, application code and deployment configuration are versioned here; database records and credentials are not. Local `.env.*` files and owner-testing screenshots are excluded from Git.
 
-连接地址仅设置在当前终端环境，没有硬编码进读取模块。当前本地地址使用 Postgres.app 已配置的本机用户认证；云端凭据与权限需另行配置。程序不会自动加载 `.env` 文件。
+The public English service needs no database URL and no shared test password. Demo limits cap stores, employees, months and calculation history. It is a portfolio environment, with no guarantee of durable storage. Render Free services may sleep when idle; opening the demo can take roughly a minute to wake it. See [Render’s free-service documentation](https://render.com/docs/free).
 
-脚本读取当月金额与员工资料快照，映射为原计算模块的输入，再打印逐项金额；只读取草稿，结果不写回数据库。省略 `--employee` 可读取该店该月所有已有草稿明细，不能据此证明员工已录齐。2026-10-06 虚构案例验证结果为 5263.00 元。
-
-Psycopg 是 Python 的 PostgreSQL 驱动，安装方式见 [官方文档](https://www.psycopg.org/psycopg3/docs/basic/install.html)。本项目已固定实际验证的 3.3.6 版本。
-
-### 网页日常流程
-
-1. **门店设置 / 员工档案**：首次分别建立门店和员工，填写稳定编号、姓名、岗位、职级、约定工资等；以后只维护人员变化。员工档案支持“按员工填写”和“表格批量编辑”；表格可加行新增多人，也可修改已有档案，最后点击“保存全部员工档案”。任一行出错时整批不写入，离职员工取消勾选“在职”。
-2. **月度工资**：选择门店和月份，点击“建立本月工资”，自动带入在职员工及约定金额。新员工可用“将新员工加入本月”添加，已有明细不会被重置。
-3. 默认选择员工，在输入框填写普通缺勤、旷工、迟到分钟、有效加班小时和表现备注；展开金额区域可调整本月工资。也可切换到表格批量编辑。
-4. “仅保存，稍后计算”只保存输入；“保存并计算本月工资”在同一事务中保存输入和结果。未保存修改、过期结果不会作为当前合计或正式下载按钮的来源。
-5. 点击月份下方黄色“设置本月工资上限”按钮，在弹窗中填写并保存；日常页面只显示设置状态和是否达到上限，不显示上限金额或余额。系统按本月已有名单的有效实发合计比较；达到上限会提示暂无职级晋升空间。当前仅提供提示，没有晋升审批或强制阻止职级编辑的流程。
-6. 下载本月核算明细，或在“核算历史”查看某次核算的输入与结果。已保存记录可以在关闭网页后重新打开；未保存的改动只保留在当前会话。
-
-工资核算使用月度快照，员工档案调薪不会追改已建立月份。离职停用不删除历史。新月份考勤默认 0，需要人工核对；月中入职尚不自动折算。
-
-### Excel 辅助流程（入口已暂时隐藏）
-
-Excel 试算代码和路由保留，但不再出现在侧栏。以下为旧流程参考，目前不会写入员工档案或月度数据库。日常批量建档可在员工档案网页表格中完成，无需上传文件。
-
-1. 在“Excel 导入”下载空白模板，或载入 8 名虚构员工。
-2. 上传后点击“读取文件并替换当前草稿”。
-3. 在“表格试算”编辑并核算，在“试算导出”查看差额、下载明细。
-
-导入读取第一个工作表，第一行为表头。姓名、工资、绩效、全勤必填；工资已包含社保补贴。绩效、全勤须填写扣考勤前的金额，没有该项请填 0。通勤补贴及考勤数值可选，留空按 0。工资类金额最多两位小数。
-
-普通缺勤和旷工目前按整天录入，不得重复计天且合计不超过 30 天。迟到单位是整分钟，加班单位是小时，可以填小数。入职时间只记录，不自动折算首月工资。缺失员工编号时生成批次内临时编号，不代表永久员工档案。
-
-模板保留老板原来的表头，并追加普通缺勤天数、分店、员工编号、岗位和职级。原表“合计”“加班费”仅作为对账参考，不能覆盖系统结果。空白模板不包含示例员工；旧版 `templates/` 中的文件不再用于网页下载，请以新下载的模板为准。
-
-## 数据库保存与历史查询
-
-在项目目录激活 `.venv`、设置 `DATABASE_URL` 后执行：
-
-```sh
-python -m scripts.database_payroll save --store '测试面包店' --month 2026-10 --employee DEMO-001
-python -m scripts.database_payroll status --store '测试面包店' --month 2026-10 --employee DEMO-001
-python -m scripts.database_payroll history --store '测试面包店' --month 2026-10 --employee DEMO-001
-```
-
-- `save` 在事务中读取和锁定草稿，调用现有公式并提交结果。同输入版本、同规则版本重复保存会复用已有结果；不会覆盖历史。省略员工参数会保存该店当月所有已有明细，异常则整批回滚。
-- `status` 只把同时匹配当前输入版本和公式版本的金额显示为当前结果；没有匹配结果时显示待核算或待重新核算。
-- `history` 查看所有已保存版本。历史列表中的金额不能直接汇总为当月总额。
-
-保存不代表确认发薪，也不证明全店员工已录齐。已确认月份无法通过此保存入口重算；数据库管理员直接改表的限制和正式确认流程尚未实现。负数实发在预览中仍可检查，但保存入口拒绝提交负数异常批次。
-
-含 PostgreSQL 的完整测试（测试结构独立于 public，结束后回滚或清理）：
-
-```sh
-TEST_DATABASE_URL='postgresql://localhost:5432/bakery_payroll_dev' python -m unittest discover -s tests -v
-```
-
-未设置 `TEST_DATABASE_URL` 时数据库集成测试会跳过。测试账号需要创建和删除隔离 schema 的权限；正式应用账号不需要这些测试权限。
-
-## 当前计算
-
-```text
-工资扣款 = 工资 / 30 × (普通缺勤天数 + 3 × 旷工天数)
-绩效扣款 = 绩效 / 30 × (普通缺勤天数 + 旷工天数)
-全勤扣款 = 全勤 / 30 × (普通缺勤天数 + 旷工天数)
-迟到扣款 = 迟到分钟数 × 1
-加班费 = 工资 / 30 / 9 × 1.5 × 有效加班时长
-合计 = 工资 + 绩效 + 全勤 + 通勤补贴 + 加班费
-       - 工资扣款 - 绩效扣款 - 全勤扣款 - 迟到扣款
-```
-
-使用十进制计算，项目金额按四舍五入保留两位后再汇总。负数实发保留计算证据并提示异常，不归零；有异常的批次不能导出。工作失误为备注。社保标记、岗位、职级、营业额及旧报损字段不自动触发扣款或改变工资。
-
-## 本阶段范围
-
-数据库工作区的保存操作会持久化；Excel 辅助工具仍使用会话数据。页面已经支持月份管理、门店上限提示和核算历史。在线测试使用共享测试口令，Render 承载网页，Neon 保存独立虚构数据。尚无正式用户权限、确认锁定、完整审计和个人工资条；导出明细不代表正式确认发薪。本地启动仅监听本机地址；云端启动使用 Render 分配的端口。测试口令与数据库凭据只放在环境变量中，不提交仓库。
-
-## 模块
-
-- `core/payroll_calc.py`：输入校验、逐项计算及原表差额。
-- `core/excel_handler.py`：新模板、Excel 导入与内存导出。
-- `core/workflow.py`：会话草稿、编辑和结果失效。
-- `core/database.py`：参数化读取 PostgreSQL 月度草稿，映射为现有计算输入。
-- `core/payroll_storage.py`：事务保存、版本匹配、当前状态与历史查询。
-- `scripts/preview_database_payroll.py`：命令行只读核算预览。
-- `scripts/database_payroll.py`：命令行 save/status/history。
-- `core/workspace.py`：员工维护、按月建档、考勤版本检查、预算保存。
-- `ui/`：统一页面组件、数据库连接入口和样式。
-- `views/`：月度工资、员工档案、核算历史及 Excel 辅助页面。
-- `scripts/run_local.sh`：本地一键启动。
-- `config.py`：已确认常量和统一字段。
-- `tests/`：核算、表格、状态及页面测试。
+Payslips, email delivery, scoped manager access and analytics are planned in the [roadmap](docs/product-roadmap.md). They are not advertised as completed functionality.
