@@ -1,57 +1,31 @@
-"""
-Streamlit 薪酬核算系统主入口文件
-初始化全局状态并配置多页面导航路由。
-"""
-
+"""面包店工资工作区。Excel 试算保留代码，暂不展示导航入口。"""
+from pathlib import Path
 import streamlit as st
+from core.workflow import initialize
+from ui.access import require_test_access
+import os
 
-# ==================== 1. 初始化全局 Session State ====================
-if 'employees_df' not in st.session_state:
-    st.session_state.employees_df = None
-
-if 'loss_df' not in st.session_state:
-    st.session_state.loss_df = None
-
-if 'store_sales' not in st.session_state:
-    # 默认三家分店的月营业额（元），供老板手动微调修改
-    st.session_state.store_sales = {
-        "分店A": 80000.0,
-        "分店B": 95000.0,
-        "分店C": 110000.0
-    }
-
-if 'social_security_std' not in st.session_state:
-    # 默认社保扣减标准金额
-    st.session_state.social_security_std = 1000.0
-
-if 'payroll_df' not in st.session_state:
-    st.session_state.payroll_df = None
-
-# ==================== 2. 配置多页面路由 ====================
-# 使用 Streamlit 1.35+ 的 st.navigation 和 st.Page 规范
-import_page = st.Page("views/import_page.py", title="1. 数据导入与配置", icon="📥")
-editor_page = st.Page("views/editor_page.py", title="2. 薪酬核算与微调", icon="✏️")
-export_page = st.Page("views/export_page.py", title="3. 经营分析与导出", icon="📊")
-
-# 分组导航
-pg = st.navigation({
-    "数据初始化": [import_page],
-    "核心算薪中心": [editor_page],
-    "报表与分析": [export_page]
-})
-
-# ==================== 3. 页面全局配置与侧边栏渲染 ====================
-st.set_page_config(
-    page_title="面包店多门店月度薪酬核算系统",
-    page_icon="🍞",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# 侧边栏标题与简短介绍
-st.sidebar.markdown("# 🍞 烘焙工坊薪酬系统")
-st.sidebar.caption("轻量化多分店月度算薪 MVP 工具")
-st.sidebar.divider()
-
-# 运行当前路由页面
+st.set_page_config(page_title="Union Bakery · 工资工作台", page_icon="🍞", layout="wide")
+st.markdown('<style>' + (Path(__file__).parent / 'ui/style.css').read_text() + '</style>', unsafe_allow_html=True)
+require_test_access()
+initialize(st.session_state)
+pages = [
+    st.Page('views/monthly_page.py', title='月度工资', icon=':material/payments:', default=True),
+    st.Page('views/employees_page.py', title='员工档案', icon=':material/group:'),
+    st.Page('views/stores_page.py', title='门店设置', icon=':material/storefront:'),
+    st.Page('views/history_page.py', title='核算历史', icon=':material/history:'),
+    st.Page('views/import_page.py', title='Excel 导入', icon=':material/upload_file:'),
+    st.Page('views/editor_page.py', title='表格试算', icon=':material/calculate:'),
+    st.Page('views/export_page.py', title='试算导出', icon=':material/download:'),
+]
+pg = st.navigation(pages, position='hidden')
+with st.sidebar:
+    st.markdown('<div class="brand"><span class="brand-name">Union</span>'
+                '<small>BAKERY</small><span class="brand-label">工资小管家</span></div>', unsafe_allow_html=True)
+    st.caption('日常工作')
+    for page in pages[:4]:
+        st.page_link(page)
+    st.divider()
+    st.caption('在线测试 · 请勿录入真实工资' if os.environ.get('APP_MODE') == 'online-test' else '本地工作空间 · 开发版')
+    st.caption('月度工资保存后可再次打开。尚未保存的表格修改仅留在当前会话。')
 pg.run()

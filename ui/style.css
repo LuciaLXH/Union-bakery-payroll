@@ -1,0 +1,40 @@
+:root {--ink:#234b67;--paper:#fffdf6;--blue:#dcebf0;--butter:#ffeca0;}
+.stApp {background:#f8f7f1;color:var(--ink);}
+.block-container {padding-top:3.6rem;padding-bottom:3rem;max-width:1400px;}
+[data-testid="stHeader"] {background:rgba(248,247,241,.96);}
+[data-testid="stSidebar"] {border-right:1px solid #c4d6dd;background:repeating-linear-gradient(90deg,#dfedf0 0,#dfedf0 18px,#eaf3f4 18px,#eaf3f4 36px);}
+.brand {padding:5px 6px 24px;color:var(--ink);text-align:center;}
+.brand-name {display:block;font-family:Georgia,'Times New Roman',serif;font-size:38px;line-height:1.05;font-weight:900;letter-spacing:-2px;}
+.brand small {display:block;font-size:11px;letter-spacing:4px;margin-top:7px;}
+.brand-label {display:inline-block;background:var(--butter);border:2px dashed var(--ink);border-radius:50%;padding:8px 23px;margin-top:18px;font-size:13px;font-weight:650;transform:rotate(-3deg);}
+.page-heading {position:relative;padding:24px 30px;margin-bottom:20px;background:repeating-linear-gradient(90deg,#deedf0 0,#deedf0 23px,#e8f2f3 23px,#e8f2f3 46px);border:1px solid #c7dadd;border-radius:6px 24px 6px 24px;}
+.eyebrow {color:#345e76;font-size:10px;letter-spacing:2.5px;font-weight:700;margin-bottom:9px;}
+.page-heading h1 {color:var(--ink);font-size:31px;font-weight:750;padding:0 0 10px;letter-spacing:1px;}
+.page-heading p {color:#456476;font-size:14px;margin:0;line-height:1.75;max-width:820px;}
+.flow-steps {display:flex;gap:8px;align-items:center;margin:0 0 20px;flex-wrap:wrap;font-size:13px;color:#526b77;}
+.flow-steps span {display:inline-flex;gap:9px;align-items:center;background:#fffdf6;border:1px solid #e3dfcf;border-radius:8px;padding:9px 15px;}
+.flow-steps b {font-family:Georgia,serif;color:var(--ink);font-size:17px;}
+[data-testid="stMetricValue"] {font-size:28px;color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums;}
+[data-testid="stMetricLabel"] {color:#5d7078;}
+.st-key-kpi_0,.st-key-kpi_1,.st-key-kpi_2,.st-key-kpi_3 {background:var(--paper);border-radius:12px;min-height:158px;}
+.st-key-kpi_1 {background:#fff4c4;}
+[class*="st-key-kpi_"] [data-testid="stCaptionContainer"] p {font-size:12px;}
+.st-key-month_filters,.st-key-month_entry,.st-key-month_results,.st-key-people_form,.st-key-store_form {background:var(--paper);border-radius:12px;}
+[data-testid="stForm"] {background:var(--paper);border-radius:12px;}
+.stButton button,.stDownloadButton button,[data-testid="stFormSubmitButton"] button {border-radius:9px;min-height:42px;border-color:#b8cbd2;color:var(--ink);}
+button[kind="primary"],button[kind="primaryFormSubmit"] {background:var(--butter)!important;color:#203f57!important;border:2px solid #355b71!important;font-weight:700;box-shadow:2px 3px 0 #cee0e5;}
+button[kind="primary"]:hover,button[kind="primaryFormSubmit"]:hover {background:#ffe27d!important;}
+button:focus-visible,a:focus-visible {outline:3px solid #417c9e!important;outline-offset:3px;}
+[data-testid="stDataFrame"] {border-radius:8px;overflow:hidden;}
+h2,h3 {color:var(--ink);}
+[data-testid="stSidebar"] [data-testid="stPageLink"] a {background:rgba(255,253,246,.65);padding:11px 12px;border:1px solid transparent;border-radius:8px;}
+[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="page"] {background:var(--butter);border-color:#abc0c9;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {color:#46677a;}
+[data-testid="stAlert"] {border-radius:9px;}
+[data-testid="stNumberInput"] input {font-variant-numeric:tabular-nums;}
+@media(max-width:800px) {.page-heading {padding:20px;}.page-heading h1 {font-size:25px;}.block-container {padding:3.8rem 1rem 1.5rem;}[data-testid="stMetricValue"] {font-size:23px;}.flow-steps span {padding:7px 9px;font-size:12px;}.st-key-kpi_0,.st-key-kpi_1,.st-key-kpi_2,.st-key-kpi_3 {min-height:110px;}}
+
+[data-testid="stNumberInputContainer"], [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea {border:1px solid #b6cbd5!important;border-radius:8px!important;background:#edf4f6!important;}
+
+.st-key-payroll_cap_settings {background:#e5eff2;border:2px solid #7295a9!important;border-radius:12px;}
+.st-key-payroll_cap_settings h3 {font-size:21px;padding:0 0 4px;}

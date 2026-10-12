@@ -1,0 +1,20 @@
+# Online test only. No credentials or payroll data in this file.
+services:
+  - type: web
+    name: union-bakery-payroll-test
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: sh scripts/run_cloud.sh
+    healthCheckPath: /_stcore/health
+    autoDeployTrigger: off
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: APP_MODE
+        value: online-test
+      - key: DATABASE_URL
+        sync: false
+      - key: TEST_PASSWORD_HASH
+        sync: false
