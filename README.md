@@ -2,6 +2,8 @@
 
 Python + Streamlit + PostgreSQL 的多门店工资工作台。已实现员工档案、按月带入员工、网页考勤编辑、核算保存、历史查询及明细导出。日常核算无需每月上传 Excel。
 
+在线测试已部署，环境说明与验证结果见 [在线测试部署记录](docs/online-test-deployment.md)。
+
 详细业务依据、公式及后续计划见 [需求与实施计划](docs/requirements-and-roadmap.md)。
 
 第二阶段已将五张 PostgreSQL 表接入网页，并统一导航和页面样式。已准备独立的云端虚构数据测试环境；正式用户权限、确认锁定和个人工资条尚未完成。详见 [网页工作台实施报告](docs/web-workspace-report.md) 与 [本地数据库搭建进度](docs/database-progress.md)。

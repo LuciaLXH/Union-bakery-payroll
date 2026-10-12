@@ -263,4 +263,3 @@ ALTER TABLE ONLY public.payroll_months
 --
 
 \unrestrict OJ5PojN5GHKNR6goW4fmQCr5zlP7HuyXfE6cXZWtNPlFMnIdcofBDFxNgTTWknF
-
