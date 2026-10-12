@@ -196,13 +196,13 @@ def monthly():
             else:
                 st.info('Double-click a cell, edit, then press Enter. Use the button below to save the whole month.')
                 order = ['姓名', '员工编号', *config.COUNT_COLUMNS, *config.MONEY_COLUMNS, '工作失误项目']
-                columns = {c: st.column_config.TextColumn(LABELS[c]) for c in ('姓名', '员工编号', '工作失误项目')}
+                columns = {c: st.column_config.TextColumn(LABELS[c]) for c in buffer['frame'].columns}
                 for c in config.MONEY_COLUMNS + config.COUNT_COLUMNS:
                     columns[c] = st.column_config.NumberColumn(LABELS[c], min_value=0.0,
                         max_value=30 if c in ('普通缺勤天数', '旷工天数') else 999999999.99,
                         step=1 if c in ('普通缺勤天数', '旷工天数', '迟到') else 0.01, required=True)
                 st.data_editor(buffer['frame'], key=prefix, column_order=order, column_config=columns,
-                    disabled=True if outdated else ['姓名', '员工编号'], hide_index=True, width='stretch',
+                    disabled=True if outdated else ['姓名', '员工编号', '分店', '岗位', '职级', '入职时间'], hide_index=True, width='stretch',
                     on_change=month_table_edit, args=(prefix, month['id']))
             st.divider()
             a, b = st.columns(2)
