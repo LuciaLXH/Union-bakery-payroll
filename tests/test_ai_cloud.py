@@ -205,3 +205,27 @@ class NaturalIdentityTests(unittest.TestCase):
             changed=repo.return_value.prepare.call_args.args[1][0]
             self.assertEqual(changed['员工编号'],'D2')
             self.assertEqual(changed['所属门店'],'二店')
+
+
+class WriteCallbackTests(unittest.TestCase):
+    def test_pending_widget_edits_cannot_commit_an_old_preview(self):
+        from datetime import date
+        from ui.ai_entry import write_review
+        preview = dict(token='token', context=('2026-10', 'AI 识别', '原文'),
+                       editor_key='editor', editor_state={'edited_rows': {}}, month_ids=[1])
+        for change in ({'ai_text': '新原文'}, {'monthly_month': date(2026, 11, 1)},
+                       {'editor': {'edited_rows': {0: {'数量': 99}}}}, {'ai_write_checked_token': False}):
+            with self.subTest(change=change):
+                state = dict(ai_text='原文', monthly_month=date(2026, 10, 1),
+                             editor={'edited_rows': {}}, ai_write_checked_token=True)
+                state.update(change)
+                # Streamlit's SessionState supports attribute as well as dictionary access.
+                class State(dict):
+                    __getattr__ = dict.__getitem__
+                    __setattr__ = dict.__setitem__
+                state = State(state)
+                with patch('ui.ai_entry.st.session_state', state), patch('ui.ai_entry.call') as call, \
+                     patch('ui.ai_entry.st.rerun'):
+                    write_review('2026-10', [record()], preview)
+                    call.assert_not_called()
+                    self.assertIn('ai_write_error', state)

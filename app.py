@@ -29,7 +29,4 @@ with st.sidebar:
     st.divider()
     st.caption('在线测试 · 请勿录入真实工资' if os.environ.get('APP_MODE') == 'online-test' else '本地工作空间 · 开发版')
     st.caption('月度工资保存后可再次打开。尚未保存的表格修改仅留在当前会话。')
-# Give reruns a stable content boundary and visible progress while old blocks retire.
-with st.container(key='workspace_page'):
-    with st.spinner('正在更新页面，请稍候…', show_time=True):
-        pg.run()
+pg.run()

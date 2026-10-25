@@ -132,9 +132,20 @@ class PayrollWorkspace(PayrollStorage):
                     raise ValueError(f'第 {line} 行：{exc}') from exc
             return saved
 
-    def months(self, store_id):
+    def months(self, store_id=None):
+        if store_id is None:
+            return self._rows('SELECT * FROM {payroll_months} ORDER BY payroll_month DESC')
         return self._rows('SELECT * FROM {payroll_months} WHERE store_id=%s ORDER BY payroll_month DESC',
                           (store_id,))
+
+    def month_view(self, store_id, month):
+        """Read the selected month's live data using one connection, without caching inputs."""
+        batches = self._rows('SELECT * FROM {payroll_months} WHERE store_id=%s AND payroll_month=%s',
+                             (store_id, month))
+        if not batches:
+            return None
+        batch = batches[0]
+        return dict(batch=batch, entries=self.entries(batch['id']), results=self.current_results(batch['id']))
 
     def start_month(self, store_id, month):
         if month.day != 1:
