@@ -144,3 +144,64 @@ class IdentityLabelTests(unittest.TestCase):
         self.assertEqual(review_rows([item],people,stores)[0]['员工编号'],'')
         item['name']='员工编号： AI-CHECK-abc124'
         self.assertEqual(review_rows([item],people,stores)[0]['员工编号'],'')
+
+
+class NaturalIdentityTests(unittest.TestCase):
+    def item(self, name):
+        return dict(name=name,kind='普通缺勤',amount=3,unit='天',mode='累计',
+                    source=f'员工{name}本月缺勤3天',question='')
+
+    def test_unique_short_name_fills_employee_with_visible_explanation(self):
+        people={'D1':'示例小面包','D2':'杨锡宁'}
+        row=review_rows([self.item('小面包')],people,{'D1':'一店','D2':'二店'})[0]
+        self.assertEqual(row['员工编号'],'D1')
+        self.assertEqual(row['数量'],3)
+        self.assertIn('简称',row['待核对问题'])
+        self.assertIn('示例小面包',row['待核对问题'])
+
+    def test_shared_short_names_and_typos_offer_candidates_without_guessing(self):
+        people={'D1':'示例小面包','D2':'小面包同学','D3':'杨新宁','D4':'杨西宁'}
+        stores={c:'一店' for c in people}
+        for name, candidates in [('小面包',['示例小面包','小面包同学']),('杨欣宁',['杨新宁','杨西宁'])]:
+            row=review_rows([self.item(name)],people,stores)[0]
+            self.assertEqual(row['员工编号'],'')
+            for candidate in candidates:
+                self.assertIn(candidate,row['待核对问题'])
+
+    def test_exact_name_wins_over_partial_and_single_char_does_not_match(self):
+        people={'D1':'小面包','D2':'示例小面包'};stores={c:'一店' for c in people}
+        self.assertEqual(review_rows([self.item('小面包')],people,stores)[0]['员工编号'],'D1')
+        self.assertEqual(review_rows([self.item('包')],people,stores)[0]['员工编号'],'')
+
+    def test_nickname_ui_uses_readable_employee_labels_and_submits_ids(self):
+        employee=dict(id=1,employee_code='D1',name='示例小面包',store_id=1,store_name='一店')
+        item=self.item('小面包')
+        with patch.dict('os.environ', {'APP_MODE':'local','RENDER':'','DATABASE_URL':'test-placeholder'}), \
+             patch('ui.common.db',side_effect=lambda method,*args,**kw: [{'id':1,'name':'一店'}] if method=='stores' else []), \
+             patch('psycopg.connect'), patch('ui.ai_entry.AIWorkspace') as repo, \
+             patch('ui.ai_entry.CloudBudget') as budget, \
+             patch('ai_entry.service.Settings.from_env',return_value=Settings(key='test',provider='qwen')), \
+             patch('ui.ai_entry.extract',return_value=[item]):
+            repo.return_value.catalog.return_value=[employee, dict(employee, employee_code='D2', name='杨锡宁', store_name='二店')]
+            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[{'员工':'示例小面包','写入后':'3'}])
+            budget.return_value.spent.return_value=0
+            at=AppTest.from_file(str(ROOT/'app.py')).run()
+            at.text_area[0].set_value(item['source'])
+            next(b for b in at.button if b.label=='识别文字').click().run()
+            self.assertFalse(at.exception)
+            editor=next(d for d in at.dataframe if '员工' in d.value.columns)
+            self.assertIn('示例小面包 · 一店',editor.value.iloc[0]['员工'])
+            next(b for b in at.button if b.label=='预览写入变更').click().run()
+            rows=repo.return_value.prepare.call_args.args[1]
+            self.assertEqual(rows[0]['员工编号'],'D1')
+            self.assertEqual(rows[0]['所属门店'],'一店')
+            self.assertFalse(at.exception)
+            at.session_state['ai_editor_1'] = {'edited_rows':{0:{'员工':'杨锡宁 · 二店 · D2'}}, 'added_rows':[], 'deleted_rows':[]}
+            at.run()
+            self.assertFalse(any(b.label=='写入当月工资记录' for b in at.button))
+            # AppTest has no editable-dataframe client; supply its widget delta for this rerun too.
+            at.session_state['ai_editor_1'] = {'edited_rows':{0:{'员工':'杨锡宁 · 二店 · D2'}}, 'added_rows':[], 'deleted_rows':[]}
+            next(b for b in at.button if b.label=='预览写入变更').click().run()
+            changed=repo.return_value.prepare.call_args.args[1][0]
+            self.assertEqual(changed['员工编号'],'D2')
+            self.assertEqual(changed['所属门店'],'二店')

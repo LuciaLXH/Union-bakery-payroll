@@ -18,28 +18,55 @@ EXAMPLE_ITEMS = [
 ]
 
 
+def employee_candidates(identity, people, source=''):
+    """Resolve exact identities, then suggest names; never fuzzy-match an employee ID."""
+    identity = identity.strip()
+    exact = [code for code, name in people.items() if identity in (name, code)]
+    if exact:
+        return exact, '完整姓名或编号'
+    code = re.sub(r'^(?:员工编号|编号)\s*[:：]?\s*', '', identity).strip()
+    if code != identity:
+        if code in people and re.search(r'(?<![A-Za-z0-9_-])' + re.escape(code) + r'(?![A-Za-z0-9_-])', source):
+            return [code], '完整姓名或编号'
+        return [], '未找到员工'
+    # IDs and one-character names must not accidentally become nickname matches.
+    name = re.sub(r'^员工\s*', '', identity).strip()
+    if len(name) < 2 or re.search(r'[0-9_-]', name):
+        return [], '未找到员工'
+    partial = [c for c, n in people.items() if name in n]
+    if partial:
+        return partial, '简称匹配'
+    # One character missing, added or substituted: candidates only, never select a typo automatically.
+    def one_edit(a, b):
+        if min(len(a), len(b)) < 3 or abs(len(a)-len(b)) > 1:
+            return False
+        if len(a) == len(b):
+            return sum(x != y for x, y in zip(a, b)) == 1
+        short, long = sorted((a,b), key=len)
+        return any(long[:i] + long[i+1:] == short for i in range(len(long)))
+    return [c for c,n in people.items() if one_edit(name,n)], '相近姓名'
+
+
 def review_rows(items, people=None, stores=None):
     people = PEOPLE if people is None else people
     stores = STORES if stores is None else stores
     rows = []
     for item in items:
-        identity = item['name'].strip()
-        matches = [code for code, name in people.items() if name == identity or code == identity]
-        if not matches:
-            # Some providers include the explicit field label in the name field.
-            # Strip only that label, require an exact known ID also present in the source.
-            candidate = re.sub(r'^(?:员工编号|编号)\s*[:：]?\s*', '', identity).strip()
-            if candidate != identity and candidate in people and re.search(
-                    r'(?<![A-Za-z0-9_-])' + re.escape(candidate) + r'(?![A-Za-z0-9_-])', item['source']):
-                matches = [candidate]
+        matches, reason = employee_candidates(item['name'], people, item['source'])
+        selected = matches[0] if len(matches) == 1 and reason != '相近姓名' else ''
         issues = [item['question']] if item['question'] else []
-        if len(matches) != 1:
-            issues.append('姓名同名或未匹配，请手动选择员工编号；不自动纠正姓名。')
+        if selected and reason == '简称匹配':
+            issues.append(f"按简称匹配为{people[selected]}（{stores[selected]}），请核对。")
+        elif not selected:
+            if matches:
+                issues.append('请选择员工：' + '、'.join(f'{people[c]}（{stores[c]}，{c}）' for c in matches))
+            else:
+                issues.append('未找到对应员工，请从姓名列表选择。')
         if item['mode'] == '待确认':
             issues.append('请确认是新增还是本月累计。')
         if item['kind'] in ('奖励', '扣款'):
             issues.append('奖罚金额尚未接入核算，请改为备注保留原文。')
-        rows.append(dict(zip(COLUMNS, [matches[0] if len(matches) == 1 else '', stores[matches[0]] if len(matches) == 1 else '', item['name'],
+        rows.append(dict(zip(COLUMNS, [selected, stores[selected] if selected else '', item['name'],
                     item['kind'], item['amount'], item['unit'], item['mode'], item['source'], '；'.join(issues)])))
     return rows
 

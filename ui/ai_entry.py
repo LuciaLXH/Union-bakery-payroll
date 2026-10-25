@@ -45,8 +45,9 @@ def render(month):
         st.dataframe(pd.DataFrame([{'编号': c, '姓名': n, '门店': stores[c]} for c,n in people.items()]), hide_index=True)
     mode = 'AI 识别'
     text = st.text_area('粘贴本月记录', max_chars=3000, height=140, key='ai_text', value=st.session_state.get('ai_saved_text', ''),
-                        placeholder='例如：员工编号 E001，10月8日迟到10分钟，新增一次；10月15日迟到5分钟，新增一次。')
+                        placeholder='例如：小面包本月缺勤3天；杨新宁10月8日迟到10分钟；李四报废了一公斤乳酪。')
     st.session_state.ai_saved_text = text
+    st.caption('可以写姓名、简称或编号。无日期的月度汇总按本月累计整理；带日期的单次考勤按新增整理，写入前可以修改。')
     st.caption(f'全站本月 AI 预算 ¥{settings.budget_cny}；已用及预留约 ¥{spent/1000000:.4f}。超出预算可手动录入。费用按配置单价估算，以百炼账单为准。')
     if mode == 'AI 识别':
         st.caption('识别会将上方文字与月份发送给千问。请使用测试数据；请勿粘贴身份证、银行账户等无关信息。')
@@ -71,18 +72,28 @@ def render(month):
         st.warning('月份、原文或录入方式已变化，请重新生成整理结果。')
         return
     st.subheader('核对整理结果')
-    st.caption('“新增”加到已有记录；“累计”替换本月总数。日期与时间保留在原文中。请核对所有待确认问题，必要时修改事项或原文。')
+    st.caption('先看员工是否对应，再看事项和数量。“累计”替换本月总数，“新增”加到已有记录；写入前会显示修改前后的数字。员工不明确时，点击“员工”单元格按姓名选择，无需查编号。')
     frame = pd.DataFrame(draft['rows'], columns=COLUMNS)
+    employee_labels = {c: f'{n} · {stores[c]} · {c}' for c,n in people.items()}
+    label_codes = {label:c for c,label in employee_labels.items()}
+    frame['员工编号'] = frame['员工编号'].map(employee_labels)
+    frame = frame.rename(columns={'员工编号':'员工'})
+    for i, row in enumerate(draft['rows'], 1):
+        if row.get('待核对问题'):
+            st.info(f"第 {i} 条（{row['原文姓名']}）：{row['待核对问题']}")
     frame['数量'] = pd.to_numeric(frame['数量'], errors='coerce').astype(float)
     rows = st.data_editor(frame, key=f"ai_editor_{st.session_state.ai_generation}", num_rows='dynamic',
-        hide_index=True, width='stretch', disabled=['所属门店'], column_config={
-            '员工编号': st.column_config.SelectboxColumn(options=list(people), required=True),
+        hide_index=True, width='stretch', disabled=['所属门店', '原文姓名', '待核对问题'], column_config={
+            '员工': st.column_config.SelectboxColumn(options=list(employee_labels.values()), required=True, width='large'),
             '事项': st.column_config.SelectboxColumn(options=KINDS, required=True),
             '数量': st.column_config.NumberColumn(min_value=0, max_value=1000000),
             '单位': st.column_config.SelectboxColumn(options=['分钟','天','小时','元','']),
             '处理方式': st.column_config.SelectboxColumn(options=MODES, required=True),
             '原文 / 备注': st.column_config.TextColumn(width='large'),
         }).to_dict('records')
+    for row in rows:
+        row['员工编号'] = label_codes.get(row.pop('员工', None), '')
+        row['所属门店'] = stores.get(row['员工编号'], '')
     st.session_state.ai_current_rows = rows
     if st.button('预览写入变更'):
         st.session_state.pop('ai_preview', None)
