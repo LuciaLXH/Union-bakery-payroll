@@ -144,6 +144,7 @@ class WorkspacePageTests(DatabaseFixture):
         self.env_patch.start()
         self.addCleanup(self.env_patch.stop)
         self.at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=20).run()
+        next(w for w in self.at.radio if w.label=='录入方式').set_value('手动填写').run()
         self.assertEqual(len(self.at.exception),0)
 
     def drop_schema(self):
@@ -153,6 +154,31 @@ class WorkspacePageTests(DatabaseFixture):
 
     def button(self,label):
         return next(b for b in self.at.button if b.label==label)
+
+    def test_inline_ai_refreshes_month_buffer_and_calculates_without_navigation(self):
+        from ai_entry.service import Settings
+        item=dict(name='TEST-001',kind='迟到',amount=10,unit='分钟',mode='新增',
+                  source='TEST-001，10月8日迟到10分钟，新增一次',question='')
+        with patch('ui.ai_entry.Settings.from_env',return_value=Settings(key='fake-test-key')), \
+             patch('ui.ai_entry.extract',return_value=[item]):
+            next(w for w in self.at.radio if w.label=='录入方式').set_value('AI 识别').run()
+            self.assertFalse(any(w.label=='选择要填写的员工' for w in self.at.selectbox))
+            next(w for w in self.at.text_area if w.label=='粘贴本月记录').set_value(item['source'])
+            self.button('识别文字').click().run()
+            self.button('预览写入变更').click().run()
+            next(w for w in self.at.checkbox if '我已核对所属门店' in w.label).check().run()
+            self.button('写入当月工资记录').click().run()
+            self.assertEqual(len(self.at.exception),0)
+            buffer=next(iter(self.at.session_state['month_buffers'].values()))
+            self.assertEqual(buffer['frame'].iloc[0]['迟到'],17)
+            self.assertTrue(buffer['frame'].equals(buffer['base']))
+            self.button('保存并计算本月工资').click().run()
+            self.assertEqual(len(self.at.exception),0)
+            repo=PayrollWorkspace(self.connection,schema=self.schema)
+            result=repo.current_results(repo.months(repo.stores()[0]['id'])[0]['id'])[0]
+            self.assertEqual(result['late_deduction'],17)
+            self.assertIn('10月8日',result['input_snapshot']['work_error_notes'])
+            self.assertEqual(len(self.at.get('download_button')),1)
 
     def test_month_save_history_and_reopen(self):
         self.button('保存并计算本月工资').click().run()

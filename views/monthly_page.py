@@ -7,21 +7,33 @@ import streamlit as st
 
 from core.workspace import entry_frame, result_frame
 from core.excel_handler import export_payroll_to_excel
+from ui.ai_entry import render as render_ai_entry, preserve_draft
 from ui.common import header, db, fetch, show_error, select_store, month_options, metrics, money, flash
 
-header('UNION BAKERY / MONTHLY PAYROLL', '一起把这个月的工资算清楚', '选好门店与月份，填写员工考勤，再保存并计算。常用工资自动带入，不用每月上传表格。')
-st.markdown('<div class="flow-steps"><span><b>01</b> 选择月份</span><span><b>02</b> 填写考勤与备注</span><span><b>03</b> 保存、计算、查看结果</span></div>', unsafe_allow_html=True)
+header('UNION BAKERY / MONTHLY PAYROLL', '月度工资', '只录入本月发生的变化。固定工资自动带入，核对后统一计算。')
+st.markdown('<div class="flow-steps"><span><b>01</b> 选择月份</span><span><b>02</b> 录入本月变化</span><span><b>03</b> 核对并计算</span></div>', unsafe_allow_html=True)
 flash()
-st.page_link('views/ai_entry_page.py', label='粘贴文字，用 AI 辅助录入考勤和备注', icon=':material/edit_note:')
-with st.container(border=True, key='month_filters'):
-    a, b = st.columns(2)
-    with a:
-        store = select_store('monthly_store')
-    months = fetch('months', store['id'])
-    options, current = month_options(months)
-    with b:
-        month = st.selectbox('工资月份', options, index=options.index(current),
-                             format_func=lambda value: value.strftime('%Y 年 %m 月'), key='monthly_month')
+stores = fetch('stores')
+if not stores:
+    st.info('先建立门店并添加员工，再开始每月核算。')
+    st.page_link('views/stores_page.py', label='建立门店')
+    st.stop()
+all_months = {s['id']: fetch('months', s['id']) for s in stores}
+options, current = month_options([m for rows in all_months.values() for m in rows])
+month = st.selectbox('工资月份', options, index=options.index(current),
+    format_func=lambda value: value.strftime('%Y 年 %m 月'), key='monthly_month')
+entry_mode = st.radio('录入方式', ['AI 识别', '手动填写'], horizontal=True, key='monthly_entry_mode', on_change=preserve_draft)
+if entry_mode == 'AI 识别':
+    with st.container(border=True, key='monthly_ai_entry'):
+        st.subheader('录入本月变化')
+        st.caption('可一次粘贴不同门店员工的记录，按姓名或编号自动匹配。下方可建立各门店本月工资；报废事项目前只保存备注。')
+        render_ai_entry(month.strftime('%Y-%m'))
+st.divider()
+st.subheader('核对门店工资')
+store_id = st.selectbox('查看 / 计算的门店', [s['id'] for s in stores],
+    format_func=lambda value: next(s['name'] for s in stores if s['id']==value), key='monthly_store')
+store = next(s for s in stores if s['id']==store_id)
+months = all_months[store_id]
 batch = next((row for row in months if row['payroll_month'] == month), None)
 if batch is None:
     st.subheader('这个月还没有工资记录')
@@ -77,23 +89,20 @@ def edit_payroll_cap():
                 show_error(exc)
 
 
-with st.container(border=True, key='payroll_cap_settings'):
-    cap_info, cap_action = st.columns([2, 1], vertical_alignment='center')
-    with cap_info:
-        st.subheader('工资上限设置', anchor=False)
-        st.caption('本月已设置 · 金额仅在设置窗口显示' if cap is not None else '本月未设置 · 点击右侧按钮设置')
-    with cap_action:
-        if st.button('设置本月工资上限', icon=':material/tune:', type='primary', width='stretch'):
-            st.session_state.cap_dialog_month = batch['id']
-
+metrics([
+    ('本月员工', str(len(entries)), '请核对名单是否完整'),
+    ('本月实发合计', money(total), '计算后更新'),
+    ('填写状态', '未保存' if dirty else ('已计算' if complete else '待计算'), '修改后需重新计算'),
+])
+cap_info, cap_action = st.columns([3, 1], vertical_alignment='center')
+with cap_info:
+    st.caption('本月工资上限已设置 · 金额仅在设置窗口显示' if cap is not None else '本月尚未设置工资上限')
+with cap_action:
+    if st.button('设置本月工资上限', icon=':material/tune:', width='stretch'):
+        st.session_state.cap_dialog_month = batch['id']
 if st.session_state.get('cap_dialog_month') == batch['id']:
     edit_payroll_cap()
 
-metrics([
-    ('本月员工', str(len(entries)), '请核对名单是否完整'),
-    ('本月实发合计', money(total), '保存并计算后更新'),
-    ('填写状态', '未保存' if dirty else ('已计算' if complete else '待计算'), '修改后需重新保存并计算'),
-])
 if complete and cap is not None:
     if total >= cap:
         st.warning('已达到本月工资上限，暂无职级晋升空间。请先核对员工名单是否完整。')
@@ -114,7 +123,7 @@ def edit_table(key, batch_id):
 
 
 with st.container(border=True, key='month_entry'):
-    st.subheader('填写员工考勤与表现备注')
+    st.subheader('手动填写考勤与备注' if entry_mode == '手动填写' else '核对已保存的考勤与备注')
     if locked:
         st.info('这个月已确认，当前页面只供查看。')
     elif outdated:
@@ -125,7 +134,7 @@ with st.container(border=True, key='month_entry'):
         st.caption('当前填写已保存并计算。需要更正时，修改下方内容后再次保存并计算。')
     else:
         st.caption('填写已保存，但工资尚未计算。核对后点击下方黄色按钮。')
-    if entries:
+    if entries and entry_mode == '手动填写':
         mode = st.radio('填写方式', ['按员工填写', '表格批量编辑'], horizontal=True, key='monthly_input_mode')
         prefix = f'input_{batch["id"]}_{generation}_{buffer["revision"]}'
         if mode == '按员工填写':
@@ -175,8 +184,13 @@ with st.container(border=True, key='month_entry'):
                 column_order=order, column_config=columns,
                 disabled=True if locked or outdated else ['员工编号','姓名','分店','岗位','职级','入职时间'],
                 hide_index=True, width='stretch', height='auto')
+    if entries and entry_mode == 'AI 识别':
+        st.caption('下表为本店已保存或手动填写的月度记录。需要直接改数字时，可切换上方“手动填写”。')
+        st.dataframe(buffer['frame'][['姓名','员工编号','普通缺勤天数','旷工天数','迟到','有效加班时长','工作失误项目']],
+                     hide_index=True, width='stretch')
+    if entries:
         st.divider()
-        st.write('填好了吗？保存本店本月所有员工的填写内容，并计算工资。')
+        st.write('核对本店本月记录后，保存并计算工资。')
         a,b = st.columns(2)
         calculate = a.button('保存并计算本月工资', type='primary', disabled=outdated or locked,
                              width='stretch', icon=':material/calculate:')

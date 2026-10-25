@@ -20,7 +20,7 @@ class DatabaseFixture(unittest.TestCase):
         self.schema = 'payroll_test_' + uuid4().hex
         self.connection.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(self.schema)))
         for filename in ('001_schema_baseline.sql', '002_add_attendance.sql',
-                         '003_calculation_history.sql'):
+                         '003_calculation_history.sql', '004_ai_entry.sql'):
             content = (ROOT / 'database' / filename).read_text()
             # 基线含 psql 元命令；测试用外层事务代替脚本自身 BEGIN/COMMIT。
             content = '\n'.join(line for line in content.splitlines()

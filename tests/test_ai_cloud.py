@@ -96,16 +96,15 @@ class AIPageTests(unittest.TestCase):
         employee=dict(id=1,employee_code='TEST-001',name='虚构员工',store_id=1,store_name='隔离测试门店')
         item=dict(name='TEST-001',kind='迟到',amount=10,unit='分钟',mode='新增',source='TEST-001迟到10分钟',question='')
         with patch.dict('os.environ', {'APP_MODE':'local','RENDER':'','DATABASE_URL':'test-placeholder'}), \
-             patch('ui.common.db',return_value=[]), patch('psycopg.connect'), \
-             patch('ai_entry.cloud.AIWorkspace') as repo, patch('ai_entry.cloud.CloudBudget') as budget, \
+             patch('ui.common.db',side_effect=lambda method,*args,**kw: [{'id':1,'name':'隔离测试门店'}] if method=='stores' else []), patch('psycopg.connect'), \
+             patch('ui.ai_entry.AIWorkspace') as repo, patch('ui.ai_entry.CloudBudget') as budget, \
              patch('ai_entry.service.Settings.from_env',return_value=Settings(key='test',provider='qwen')), \
-             patch('ai_entry.service.extract',return_value=[item]):
+             patch('ui.ai_entry.extract',return_value=[item]):
             repo.return_value.catalog.return_value=[employee]
             repo.return_value.prepare.return_value=dict(token='preview-token',changes=[{'员工':'虚构员工','写入后':'10'}])
             repo.return_value.apply.return_value=1
             budget.return_value.spent.return_value=0
             at=AppTest.from_file(str(ROOT/'app.py')).run()
-            at.switch_page('views/ai_entry_page.py').run()
             self.assertEqual(len(at.exception),0)
             self.assertEqual(at.radio[0].value,'AI 识别')
             at.text_area[0].set_value('TEST-001迟到10分钟')
@@ -114,10 +113,22 @@ class AIPageTests(unittest.TestCase):
             self.assertEqual(len(at.exception),0)
             self.assertTrue(next(b for b in at.button if b.label=='写入当月工资记录').disabled)
             at.checkbox[0].check().run()
+            import pandas as pd
+            at.session_state['month_buffers'] = {99: {'frame':pd.DataFrame({'迟到':[20]}), 'base':pd.DataFrame({'迟到':[0]})}}
+            at.run()
+            self.assertTrue(next(b for b in at.button if b.label=='写入当月工资记录').disabled)
+            repo.return_value.apply.assert_not_called()
+            at.session_state['month_buffers'] = {}
+            at.run()
             next(b for b in at.button if b.label=='写入当月工资记录').click().run()
             repo.return_value.apply.assert_called_once()
             self.assertTrue(any('已写入 1' in s.value for s in at.success))
             next(b for b in at.button if b.label=='识别文字').click().run()
+            at.session_state['ai_current_rows'][0]['数量'] = 15.0
+            next(r for r in at.radio if r.label=='录入方式').set_value('手动填写').run()
+            next(r for r in at.radio if r.label=='录入方式').set_value('AI 识别').run()
+            self.assertEqual(at.text_area[0].value,'TEST-001迟到10分钟')
+            self.assertEqual(at.session_state['ai_draft']['rows'][0]['数量'],15.0)
             at.text_area[0].set_value('修改后的原文').run()
             self.assertFalse(any(b.label=='写入当月工资记录' for b in at.button))
             self.assertEqual(len(at.exception),0)

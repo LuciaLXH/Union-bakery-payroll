@@ -73,7 +73,7 @@ class AIWorkspace(PayrollWorkspace):
         for store_id in store_ids:
             batches = [m for m in self.months(store_id) if m['payroll_month'] == month]
             if not batches:
-                raise EntryError(f"{next(e['store_name'] for e in catalog if e['store_id']==store_id)} 尚未建立该月工资。请先在“月度工资”建立，再回来预览。")
+                raise EntryError(f"{next(e['store_name'] for e in catalog if e['store_id']==store_id)} 尚未建立该月工资。请在本页下方选择该门店并建立本月工资，再预览。")
             batch = batches[0]
             if batch['status'] != 'draft':
                 raise EntryError('该月份已确认，不能写入。')

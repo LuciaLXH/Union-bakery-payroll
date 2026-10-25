@@ -24,7 +24,7 @@ with st.sidebar:
     st.markdown('<div class="brand"><span class="brand-name">Union</span>'
                 '<small>BAKERY</small><span class="brand-label">工资小管家</span></div>', unsafe_allow_html=True)
     st.caption('日常工作')
-    for page in pages[:5]:
+    for page in pages[:4]:
         st.page_link(page)
     st.divider()
     st.caption('在线测试 · 请勿录入真实工资' if os.environ.get('APP_MODE') == 'online-test' else '本地工作空间 · 开发版')
