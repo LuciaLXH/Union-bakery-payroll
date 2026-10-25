@@ -51,6 +51,7 @@ class PayrollStorage:
 
     def __init__(self, connection, *, schema='public'):
         self.connection = connection
+        self.schema = schema
         self.tables = {name: sql.Identifier(schema, name) for name in (
             'stores', 'payroll_months', 'payroll_entries', 'payroll_calculations')}
 
@@ -140,7 +141,9 @@ class PayrollStorage:
             JOIN {payroll_months} p ON p.id=d.payroll_month_id
             JOIN {stores} s ON s.id=p.store_id
             LEFT JOIN {payroll_calculations} c ON c.payroll_entry_id=d.id
-                AND c.input_version=d.input_version AND c.rule_version=%s
+                AND c.input_version=d.input_version AND
+                ((p.status='draft' AND c.rule_version=%s) OR
+                 (p.status<>'draft' AND c.id=ANY(p.confirmed_calculation_ids)))
             WHERE s.name=%s AND p.payroll_month=%s'''
         parameters = [config.RULE_VERSION, store_name, payroll_month]
         if employee_code is not None:

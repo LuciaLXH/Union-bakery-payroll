@@ -2,8 +2,9 @@ import hashlib
 import os
 import time
 import streamlit as st
+import psycopg
 from core.access import AttemptLimiter, parse_hash, session_valid
-from ui.common import header
+from core.production import owner_config, owner_session_valid, check_owner_login, new_owner_session
 
 
 @st.cache_resource
@@ -12,8 +13,11 @@ def limiter():
 
 
 def require_test_access():
+    from ui.common import header
     # A Render deployment never silently falls back to the local bypass.
     mode = os.environ.get('APP_MODE','local')
+    if mode == 'production':
+        return require_owner_access()
     if mode=='local' and not os.environ.get('RENDER'):
         return
     if mode not in ('local','online-test'):
@@ -48,4 +52,55 @@ def require_test_access():
             st.error('尝试次数较多，请一分钟后再试。')
         else:
             st.error('口令不正确，请检查后重试。')
+    st.stop()
+
+
+def check_access():
+    """Also called by callbacks/fragments, before the main app gate can rerun."""
+    mode = os.environ.get('APP_MODE', 'local')
+    if mode == 'local' and not os.environ.get('RENDER'):
+        return
+    if mode == 'production':
+        valid = owner_session_valid(st.session_state.get('owner_access'))
+    elif mode in ('local', 'online-test'):
+        valid = session_valid(st.session_state.get('test_access'), os.environ.get('TEST_PASSWORD_HASH', ''))
+    else:
+        valid = False
+    if not valid:
+        raise ValueError('登录已失效，请刷新页面重新登录；本次操作未提交。')
+
+
+def require_owner_access():
+    from ui.common import header
+    try:
+        owner_config()
+        if owner_session_valid(st.session_state.get('owner_access')):
+            with st.sidebar:
+                st.caption('老板工作台 · 单人正式版')
+                if st.button('退出登录'):
+                    st.session_state.clear()
+                    st.rerun()
+            return
+    except ValueError:
+        st.error('正式入口尚未配置完成，请联系维护者。')
+        st.stop()
+    if 'owner_access' in st.session_state or not st.session_state.get('owner_gate_ready'):
+        st.session_state.clear()
+        st.session_state.owner_gate_ready = True
+    header('UNION BAKERY', '登录工资工作台', '仅供老板本人使用。登录后可管理员工、核算和确认工资。')
+    with st.form('owner_login', clear_on_submit=True):
+        username = st.text_input('账号', max_chars=100)
+        password = st.text_input('密码', type='password', max_chars=1024)
+        submitted = st.form_submit_button('登录', type='primary')
+    if submitted:
+        try:
+            with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=15) as connection:
+                connection.execute('SET LOCAL lock_timeout=5000; SET LOCAL statement_timeout=30000')
+                outcome = check_owner_login(connection, username.strip(), password)
+            if outcome == 'ok':
+                st.session_state.owner_access = new_owner_session(time.time())
+                st.rerun()
+            st.error('尝试次数较多，请一分钟后再试。' if outcome == 'wait' else '账号或密码不正确。')
+        except (ValueError, psycopg.Error):
+            st.error('暂时无法登录，请稍后重试或联系维护者。')
     st.stop()

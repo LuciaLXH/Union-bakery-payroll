@@ -1,0 +1,31 @@
+# Separate service and EMPTY database. This does not replace the test or portfolio service.
+services:
+  - type: web
+    name: union-bakery-payroll-owner
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: sh scripts/run_production.sh
+    healthCheckPath: /_stcore/health
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: APP_MODE
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: PRODUCTION_INSTANCE_ID
+        sync: false
+      - key: OWNER_USERNAME
+        sync: false
+      - key: OWNER_PASSWORD_HASH
+        sync: false
+      - key: AI_ENTRY_PROVIDER
+        value: qwen
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: AI_ENTRY_BUDGET_CNY
+        value: '30'

@@ -17,6 +17,12 @@ with st.container(border=True):
         selected = st.selectbox('工资月份', [m['payroll_month'] for m in months],
             format_func=lambda value: value.strftime('%Y 年 %m 月'), key='history_month')
 batch = next(m for m in months if m['payroll_month']==selected)
+with st.expander('查看确认、发放与更正记录'):
+    actions = fetch('month_actions', batch['id'])
+    if actions:
+        labels = {'draft':'草稿','confirmed':'已确认','paid':'已标记发放'}
+        st.dataframe(pd.DataFrame([{'时间':str(a[0]), '操作账号':a[1], '说明':a[2],
+            '原状态':labels.get(a[3], '新建'), '新状态':labels.get(a[4], a[4])} for a in actions]), hide_index=True)
 entries = fetch('entries', batch['id'])
 versions = {e['id']:e['input_version'] for e in entries}
 history = fetch('history', store_name=store['name'], payroll_month=selected)
@@ -29,7 +35,8 @@ employee = st.selectbox('员工', ['全部员工']+codes)
 filtered = [r for r in history if employee=='全部员工' or r['input_snapshot'].get('employee_code_snapshot')==employee]
 rows=[]
 for r in reversed(filtered):
-    current = versions.get(r['payroll_entry_id'])==r['input_version'] and r['rule_version']==config.RULE_VERSION
+    current = (r['id'] in (batch['confirmed_calculation_ids'] or []) if batch['status'] != 'draft' else
+               versions.get(r['payroll_entry_id'])==r['input_version'] and r['rule_version']==config.RULE_VERSION)
     rows.append({'结果编号':r['id'], '姓名':r['input_snapshot'].get('employee_name_snapshot'),
         '员工编号':r['input_snapshot'].get('employee_code_snapshot'), '输入版本':r['input_version'],
         '实发金额':float(r['net_pay']), '状态':'当前有效' if current else '历史版本',

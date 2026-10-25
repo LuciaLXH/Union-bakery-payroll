@@ -1,4 +1,4 @@
-"""仅供虚构数据在线测试的共享口令；不是正式员工身份和权限系统。"""
+"""Password hashing/session primitives; in-memory limiter is for the test entrance only."""
 import hashlib
 import hmac
 import secrets
@@ -11,7 +11,7 @@ SESSION_SECONDS = 4 * 60 * 60
 
 def password_hash(password):
     if not 16 <= len(password) <= 1024:
-        raise ValueError('测试口令需为 16–1024 个字符。')
+        raise ValueError('密码需为 16–1024 个字符。')
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, ITERATIONS)
     return f'pbkdf2_sha256${ITERATIONS}${salt.hex()}${digest.hex()}'
@@ -24,7 +24,7 @@ def parse_hash(encoded):
             raise ValueError
         return bytes.fromhex(salt), bytes.fromhex(digest)
     except (ValueError, AttributeError):
-        raise ValueError('测试访问口令配置无效。') from None
+        raise ValueError('访问密码配置无效。') from None
 
 
 def verify_password(password, encoded):

@@ -106,7 +106,7 @@ def create_attendance_template(sample=False):
 
 
 def export_payroll_to_excel(payroll_df):
-    """第一阶段仅导出核算明细，个人工资条及确认归档留待后续。"""
+    """Export the result's own rules and confirmation state, including locked history."""
     if payroll_df is None or payroll_df.empty:
         raise ValueError("没有可导出的核算结果")
     if payroll_df["核算提示"].ne("").any():
@@ -115,8 +115,10 @@ def export_payroll_to_excel(payroll_df):
     with _writer(buffer) as writer:
         _write_sheet(writer, payroll_df, "核算明细")
         _write_sheet(writer, pd.DataFrame([
-            {"项目": "规则版本", "说明": config.RULE_VERSION},
+            {"项目": "规则版本", "说明": '、'.join(map(str, payroll_df['规则版本'].unique()))
+             if '规则版本' in payroll_df else config.RULE_VERSION},
             {"项目": "金额口径", "说明": "工资已含社保补贴；绩效和全勤为扣缺勤前金额；合计为实发。"},
-            {"项目": "状态", "说明": "核算草稿明细，仅供核对，不代表正式确认发薪。数据库版本见明细中的版本列（如有）。"},
+            {"项目": "状态", "说明": ('、'.join(payroll_df['确认状态'].unique())
+             if '确认状态' in payroll_df else '核算草稿（未确认）') + '。本系统不执行转账，发放状态仅为人工标记。'},
         ]), "核算说明").set_column(1, 1, 90)
     return buffer.getvalue()

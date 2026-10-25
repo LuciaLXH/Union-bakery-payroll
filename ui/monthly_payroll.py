@@ -14,7 +14,8 @@ from ui.common import metrics, money
 def save_month(batch_id, calculate):
     buffer = st.session_state['month_buffers'][batch_id]
     try:
-        common.db('save_inputs', batch_id, buffer['frame'], buffer['versions'], calculate=calculate)
+        common.db('save_inputs', batch_id, buffer['frame'], buffer['versions'], calculate=calculate,
+                  expected_lifecycle=buffer['lifecycle_version'])
         st.session_state['month_buffers'].pop(batch_id, None)
         st.session_state.monthly_notice = ('已保存并计算本月工资。下方“本月计算结果”可查看明细和下载。'
             if calculate else '填写内容已保存。准备好后，再点击“保存并计算本月工资”。')
@@ -33,6 +34,23 @@ def start_month(store_id, month, batch_id=None):
 
 def reload_month(batch_id):
     st.session_state.get('month_buffers', {}).pop(batch_id, None)
+
+
+def transition(batch_id, action, version, ids, cap, checkbox_key, reason_key=None):
+    try:
+        if not st.session_state.get(checkbox_key):
+            raise ValueError('请先勾选核对确认。')
+        buffer = st.session_state.get('month_buffers', {}).get(batch_id)
+        if buffer and not buffer['frame'].equals(buffer['base']):
+            raise ValueError('仍有未保存的修改，请先保存并计算。')
+        common.db('transition_month', batch_id, action, version, calculation_ids=ids,
+                  expected_cap=cap, reason=st.session_state.get(reason_key, '') if reason_key else '')
+        reload_month(batch_id)
+        st.session_state.monthly_notice = {'confirm':'本月工资已确认并锁定。尚未标记发放，不会自动转账。',
+            'paid':'已记录您确认的发放状态。本系统未执行转账。',
+            'reopen':'已记录更正原因并解除锁定。请更正、核算并重新确认；不会撤销已完成的转账。'}[action]
+    except (ValueError, psycopg.Error) as exc:
+        st.session_state.monthly_error = exc
 
 
 @st.fragment(key='monthly_payroll')
@@ -66,11 +84,13 @@ def render_payroll(month, stores, entry_mode):
     if batch['id'] not in buffers:
         frame = entry_frame(entries, store['name'])
         buffers[batch['id']] = dict(frame=frame, base=frame.copy(deep=True),
-            versions={row['id']: row['input_version'] for row in entries}, revision=0)
+            versions={row['id']: row['input_version'] for row in entries}, revision=0,
+            lifecycle_version=batch['lifecycle_version'])
     buffer = buffers[batch['id']]
     generation = buffer.setdefault('generation', uuid4().hex)
     dirty = not buffer['frame'].equals(buffer['base'])
-    outdated = buffer['versions'] != {row['id']: row['input_version'] for row in entries}
+    outdated = (buffer['versions'] != {row['id']: row['input_version'] for row in entries}
+                or buffer['lifecycle_version'] != batch['lifecycle_version'])
     locked = batch['status'] != 'draft'
     results = view['results']
     complete = (bool(entries) and len(results) == len(entries) and not dirty and not outdated
@@ -113,7 +133,8 @@ def render_payroll(month, stores, entry_mode):
     metrics([
         ('本月员工', str(len(entries)), '请核对名单是否完整'),
         ('本月实发合计', money(total), '计算后更新'),
-        ('填写状态', '未保存' if dirty else ('已计算' if complete else '待计算'), '修改后需重新计算'),
+        ('填写状态', {'confirmed':'已确认 · 已锁定','paid':'已标记发放 · 已锁定'}.get(batch['status'],
+            '未保存' if dirty else ('已计算' if complete else '待计算')), '确认后不能直接修改'),
     ])
     cap_info, cap_action = st.columns([3, 1], vertical_alignment='center')
     with cap_info:
@@ -228,6 +249,9 @@ def render_payroll(month, stores, entry_mode):
             st.subheader('本月计算结果')
             st.success(f'已保存 · 本月 {len(entries)} 名员工，实发合计 {money(total)}')
             details = result_frame(results)
+            details['确认状态'] = {'draft':'核算草稿（未确认）','confirmed':'已确认（未标记发放）','paid':'已标记发放'}[batch['status']]
+            details['确认时间'] = str(batch['confirmed_at'] or '')
+            details['发放标记时间'] = str(batch['paid_at'] or '')
             display = details[['姓名','工资扣款','绩效扣款','全勤扣款','迟到扣款','加班费','合计']].rename(columns={'合计':'实发金额'})
             st.dataframe(display, hide_index=True, width='stretch',
                 column_config={c:st.column_config.NumberColumn(c,format='%.2f') for c in display.columns if c!='姓名'})
@@ -240,8 +264,32 @@ def render_payroll(month, stores, entry_mode):
                     hide_index=True, width='stretch', column_config={'金额（元）':st.column_config.NumberColumn(format='%.2f')})
                 st.write('表现 / 失误备注：',record['工作失误项目'] or '无')
             st.download_button('下载本月工资明细（Excel）', export_payroll_to_excel(details),
-                f'{month:%Y-%m}_工资核算明细.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', on_click='ignore')
+                f'{month:%Y-%m}_{batch["status"]}_工资核算明细.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', on_click='ignore')
             st.page_link('views/history_page.py',label='查看历次计算记录',icon=':material/history:')
+            st.divider()
+            version = batch['lifecycle_version']
+            ids = [r['id'] for r in results]
+            if not locked:
+                st.write('核对完成后，确认并锁定本月工资。')
+                key = f'confirm_month_{batch["id"]}_{version}_{"_".join(map(str, ids))}_{cap}'
+                checked = st.checkbox('我已核对员工名单、考勤、金额及需另行处理的调整，确认本月工资', key=key)
+                st.button('确认并锁定本月工资', disabled=not checked, on_click=transition,
+                    args=(batch['id'], 'confirm', version, ids, cap, key))
+                st.caption('锁定后不能直接修改或 AI 写入。报废、奖罚和月中入离职折算尚未自动处理，请确认已完成必要核对。')
+            else:
+                st.info('本月工资已锁定，确认时的计算结果会保留。确认和发放标记均不会执行转账。')
+                if batch['status'] == 'confirmed':
+                    key = f'paid_month_{batch["id"]}_{version}'
+                    checked = st.checkbox('我已在系统外完成本月工资发放，只记录状态', key=key)
+                    st.button('标记已发放', disabled=not checked, on_click=transition,
+                        args=(batch['id'], 'paid', version, ids, cap, key))
+                with st.expander('需要更正已确认的工资'):
+                    reason_key = f'reopen_reason_{batch["id"]}_{version}'
+                    reason = st.text_area('更正原因', key=reason_key, max_chars=1000)
+                    key = f'reopen_month_{batch["id"]}_{version}'
+                    checked = st.checkbox('我理解旧确认记录会保留，更正不会撤销实际转账，差额需另行核对处理', key=key)
+                    st.button('记录原因并解除锁定', disabled=not checked or not reason.strip(), on_click=transition,
+                        args=(batch['id'], 'reopen', version, ids, cap, key, reason_key))
     elif entries:
         st.info('结果暂不可下载。保存并计算成功后，这里会显示本月实发金额和下载按钮。')
 
@@ -250,4 +298,5 @@ def render_payroll(month, stores, entry_mode):
         st.button('将新员工加入本月', disabled=dirty or locked or outdated, on_click=start_month, args=(store_id, month, batch['id']))
         st.page_link('views/employees_page.py',label='新增或维护员工档案')
         st.button('放弃未保存修改并重新读取' if dirty else '重新读取已保存数据', on_click=reload_month, args=(batch['id'],))
-    st.caption('当前为核算草稿。已保存的数据下次打开仍可使用；尚未保存的填写内容仅留在当前网页会话。')
+    st.caption('本月已锁定。需要更正时，请在计算结果下填写原因并解除锁定。' if locked else
+               '当前为核算草稿。已保存的数据下次打开仍可使用；尚未保存的填写内容仅留在当前网页会话。')

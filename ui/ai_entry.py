@@ -13,8 +13,11 @@ from ui import common
 
 
 def call(method, *args):
+    from ui.access import check_access
+    check_access()
     with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=15) as connection:
         connection.execute('SET LOCAL lock_timeout=5000; SET LOCAL statement_timeout=30000')
+        common.bind_connection(connection, schema=common.DB_SCHEMA)
         return getattr(AIWorkspace(connection, schema=common.DB_SCHEMA), method)(*args)
 
 
@@ -97,7 +100,9 @@ def render_editor(month):
     st.caption('默认“新增”：本次数量加到已保存记录。要替换本月总数，请明确写“本月累计”或“总共”。建议写上日期，同一事项只录一次；写入前可修改。')
     st.caption(f'全站本月 AI 预算 ¥{settings.budget_cny}；已用及预留约 ¥{spent/1000000:.4f}。超出预算可手动录入。费用按配置单价估算，以百炼账单为准。')
     if mode == 'AI 识别':
-        st.caption('识别会将上方文字与月份发送给千问。请使用测试数据；请勿粘贴身份证、银行账户等无关信息。')
+        st.caption('识别会将上方文字与月份发送给千问，请只填写本次考勤所需信息。'
+                   if os.environ.get('APP_MODE') == 'production' else
+                   '识别会将上方文字与月份发送给千问。请使用测试数据；请勿粘贴身份证、银行账户等无关信息。')
         if not settings.key:
             st.warning('AI 密钥尚未配置，可先使用手动录入。')
     context = (month, mode, text)

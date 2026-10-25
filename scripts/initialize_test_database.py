@@ -12,6 +12,7 @@ import psycopg
 from psycopg import sql
 
 from core.workspace import PayrollWorkspace, entry_frame
+from scripts.production_database import MIGRATIONS, migration_sql, grant_app
 
 
 def initialize(connection, app_password):
@@ -20,19 +21,12 @@ def initialize(connection, app_password):
             raise ValueError('Only bakery_payroll_test may be initialized.')
         if connection.execute("SELECT 1 FROM information_schema.tables WHERE table_schema='public' LIMIT 1").fetchone():
             raise ValueError('Database is not empty; initialization stopped without changes.')
-        root = Path(__file__).resolve().parents[1]
-        for filename in ('001_schema_baseline.sql', '002_add_attendance.sql', '003_calculation_history.sql'):
-            source = (root / 'database' / filename).read_text()
-            source = '\n'.join(line for line in source.splitlines()
-                               if not line.startswith('\\') and line.strip() not in ('BEGIN;', 'COMMIT;'))
-            connection.execute(source, prepare=False)
+        for filename in MIGRATIONS:
+            connection.execute(migration_sql(filename), prepare=False)
         connection.execute('SET LOCAL search_path TO public, pg_catalog')
         # App role has no schema ownership, role administration, or deletion rights.
         connection.execute(sql.SQL('CREATE ROLE bakery_app LOGIN PASSWORD {}').format(sql.Literal(app_password)))
-        connection.execute('GRANT CONNECT ON DATABASE bakery_payroll_test TO bakery_app')
-        connection.execute('GRANT USAGE ON SCHEMA public TO bakery_app')
-        connection.execute('GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO bakery_app')
-        connection.execute('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bakery_app')
+        grant_app(connection, 'bakery_app')
         repo = PayrollWorkspace(connection)
         store = repo.add_store('Union 虚构测试店')
         repo.save_employee(store['id'], dict(employee_code='DEMO-001', name='示例小面包',
@@ -57,4 +51,4 @@ if __name__ == '__main__':
         raise ValueError('Use a direct connection for initialization.')
     with psycopg.connect(url, connect_timeout=15) as connection:
         initialize(connection, os.environ['CLOUD_APP_PASSWORD'])
-    print('Created 5 tables and synthetic demo. Verified net pay: 5263.00')
+    print('Initialized current schema and synthetic demo. Verified net pay: 5263.00')

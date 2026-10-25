@@ -2,6 +2,8 @@
 
 [English portfolio overview](README.md) · [本轮完整交接记录](docs/2026-10-25-ai-entry-handover.md) · [后续功能路线图](docs/product-roadmap.md)
 
+老板单人正式版准备：已增加专用登录、数据库环境校验、工资确认锁定/发放标记/留原因更正、操作记录和备份恢复工具。见[正式版操作与维护说明](docs/production-owner-guide.md)。正式账号暂由开发者持有；首月仍需与原 Excel 对账，不能把技术验证当作业务验收。
+
 Python + Streamlit + PostgreSQL 的多门店工资工作台。已实现员工档案、按月带入员工、网页考勤编辑、核算保存、历史查询及明细导出。日常核算无需每月上传 Excel。
 
 2026-10-25 已将千问 AI 录入整合到月度工资页，修复重复核对卡片及操作回顶问题；用户测试反馈之前的问题已解决。最终运行版本 `311ea78`，126 项测试通过。该确认不代表正式上线验收，下一步讨论正式上线安排。
@@ -10,7 +12,7 @@ Python + Streamlit + PostgreSQL 的多门店工资工作台。已实现员工档
 
 详细业务依据、公式及后续计划见 [需求与实施计划](docs/requirements-and-roadmap.md)。
 
-现有数据库包含五张核心业务表和两张 AI 预算/录入事件辅助表，已接入网页。已准备独立的云端虚构数据测试环境；正式用户权限、确认锁定和个人工资条尚未完成。详见 [网页工作台实施报告](docs/web-workspace-report.md) 与 [本地数据库搭建进度](docs/database-progress.md)。
+数据库005迁移在原五张核心表和两张AI辅助表上增加环境标识、登录限速、审计三张表。老板单人权限和确认锁定已实现；多角色权限及个人工资条尚未实现。旧阶段报告见 [网页工作台实施报告](docs/web-workspace-report.md) 与 [本地数据库搭建进度](docs/database-progress.md)。
 
 [核算历史结构脚本](database/003_calculation_history.sql) 已应用。2026 年 10 月 12 日已完成实际保存及考勤修改后重算验证，详细结果见 [核算保存实施报告](docs/payroll-storage-report.md)。
 

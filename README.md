@@ -6,6 +6,8 @@ A payroll workspace for a small bakery, developed through owner feedback: reusab
 
 Development record: [2026-10-25 Chinese AI-entry changes, verification and handover](docs/2026-10-25-ai-entry-handover.md). The Qwen-assisted entry described there is available in the Chinese test workspace, not the public English demo.
 
+The Chinese single-owner release now includes a separate owner login, database environment checks, payroll confirmation/locking, payment-status recording, reasoned corrections, an audit trail and backup/restore tooling. See the [owner operations guide](docs/production-owner-guide.md). These features are separate from the public demo; first-month business reconciliation is still required before relying on the app for payment.
+
 The English portfolio demo runs independently of the Chinese owner-testing environment. Both use the same tested Python calculation engine. The public demo contains fictional data only, isolates changes to each visitor’s session and never reads the owner database connection.
 
 ![English portfolio workspace with fictional data](docs/portfolio-assets/english-workspace.png)

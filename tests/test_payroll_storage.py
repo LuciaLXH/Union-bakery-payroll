@@ -67,10 +67,14 @@ class PayrollStorageTests(DatabaseFixture):
         self.assertEqual(len(self.storage.history(**self.selection)), 2)
 
     def test_confirmed_month_cannot_be_saved(self):
-        self.connection.execute("UPDATE payroll_months SET status='confirmed'")
+        from core.workspace import PayrollWorkspace
+        repo = PayrollWorkspace(self.connection, schema=self.schema)
+        result = self.storage.save(**self.selection)[0]
+        month = repo.months()[0]
+        repo.transition_month(month['id'], 'confirm', month['lifecycle_version'], calculation_ids=[result['id']])
         with self.assertRaisesRegex(ValueError, '已确认'):
             self.storage.save(**self.selection)
-        self.assertEqual(self.storage.history(**self.selection), [])
+        self.assertEqual(len(self.storage.history(**self.selection)), 1)
 
     def test_missing_and_special_character_selection_do_not_write(self):
         for code in ('missing', "TEST-001' OR TRUE --"):

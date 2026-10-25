@@ -8,17 +8,21 @@ import psycopg
 import streamlit as st
 
 from core.workspace import PayrollWorkspace
+from core.production import bind_connection
 
 DB_SCHEMA = 'public'
 
 
 def db(method, *args, **kwargs):
+    from ui.access import check_access
+    check_access()
     url = os.environ.get('DATABASE_URL', '')
     if not url:
         raise ValueError('工作空间尚未连接，请使用项目启动脚本打开网页。')
     with psycopg.connect(url, connect_timeout=15) as connection:
         # Transaction-local settings also work through Neon's PgBouncer pool.
         connection.execute('SET LOCAL lock_timeout = 5000; SET LOCAL statement_timeout = 30000')
+        bind_connection(connection, schema=DB_SCHEMA)
         return getattr(PayrollWorkspace(connection, schema=DB_SCHEMA), method)(*args, **kwargs)
 
 
@@ -67,7 +71,7 @@ def select_store(key):
 
 
 def month_options(existing):
-    today = datetime.now(ZoneInfo('Pacific/Auckland')).date()
+    today = datetime.now(ZoneInfo('Asia/Shanghai')).date()
     options = {row['payroll_month'] for row in existing}
     serial = today.year * 12 + today.month - 1
     for offset in range(-12, 2):

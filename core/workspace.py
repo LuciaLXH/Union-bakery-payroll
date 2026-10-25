@@ -186,13 +186,15 @@ class PayrollWorkspace(PayrollStorage):
     def entries(self, month_id):
         return self._rows('SELECT * FROM {payroll_entries} WHERE payroll_month_id=%s ORDER BY id', (month_id,))
 
-    def save_inputs(self, month_id, frame, versions, *, calculate=False):
+    def save_inputs(self, month_id, frame, versions, *, calculate=False, expected_lifecycle=None):
         with self.connection.transaction():
             batches = self._rows('''SELECT p.*,s.name AS store_name FROM {payroll_months} p
                 JOIN {stores} s ON s.id=p.store_id WHERE p.id=%s FOR UPDATE OF p''', (month_id,))
             if not batches or batches[0]['status'] != 'draft':
                 raise ValueError('该月份已经确认或不存在，不能修改。')
             month = batches[0]
+            if expected_lifecycle is not None and month['lifecycle_version'] != expected_lifecycle:
+                raise ValueError('本月确认状态已变化，请重新读取后核对。')
             entries = self._rows('SELECT * FROM {payroll_entries} WHERE payroll_month_id=%s ORDER BY id FOR UPDATE',
                                  (month_id,))
             if {row['id']: row['input_version'] for row in entries} != versions:
@@ -229,8 +231,52 @@ class PayrollWorkspace(PayrollStorage):
     def current_results(self, month_id):
         return self._rows('''SELECT c.* FROM {payroll_calculations} c
             JOIN {payroll_entries} d ON d.id=c.payroll_entry_id
+            JOIN {payroll_months} p ON p.id=d.payroll_month_id
             WHERE d.payroll_month_id=%s AND c.input_version=d.input_version
-            AND c.rule_version=%s ORDER BY d.id''', (month_id, config.RULE_VERSION))
+            AND ((p.status='draft' AND c.rule_version=%s) OR
+                 (p.status<>'draft' AND c.id=ANY(p.confirmed_calculation_ids)))
+            ORDER BY d.id''', (month_id, config.RULE_VERSION))
+
+    def transition_month(self, month_id, action, expected_version, *, calculation_ids=None,
+                         expected_cap=None, reason=''):
+        """Lock and compare the exact reviewed result set before finalization."""
+        targets = {'confirm': ('draft', 'confirmed'), 'paid': ('confirmed', 'paid')}
+        with self.connection.transaction():
+            rows = self._rows('SELECT * FROM {payroll_months} WHERE id=%s FOR UPDATE', (month_id,))
+            if not rows or rows[0]['lifecycle_version'] != expected_version:
+                raise ValueError('月份状态已变化，请重新读取后操作。')
+            month = rows[0]
+            if action == 'reopen':
+                if month['status'] not in ('confirmed', 'paid') or not reason.strip():
+                    raise ValueError('请填写更正原因；只有已确认或已标记发放的月份可更正。')
+                target = 'draft'
+            elif action in targets and month['status'] == targets[action][0]:
+                target = targets[action][1]
+                reason = '老板核对后确认工资' if action == 'confirm' else '老板确认已在系统外完成发放（仅标记）'
+            else:
+                raise ValueError('当前月份状态不支持此操作，请重新读取。')
+            self.connection.execute("SELECT set_config('app.reason', %s, true)", (reason.strip(),))
+            if action == 'confirm':
+                entries = self._rows('SELECT * FROM {payroll_entries} WHERE payroll_month_id=%s ORDER BY id FOR UPDATE', (month_id,))
+                results = self.current_results(month_id)
+                actual = sorted(r['id'] for r in results)
+                if (not entries or len(results) != len(entries) or any(r['net_pay'] < 0 for r in results)
+                        or actual != sorted(calculation_ids or []) or month['payroll_cap_snapshot'] != expected_cap):
+                    raise ValueError('工资结果或上限已变化，或还有未核算员工，请重新读取、核算并核对。')
+                self._rows('''UPDATE {payroll_months} SET status=%s,confirmed_rule_version=%s,
+                    confirmed_calculation_ids=%s WHERE id=%s RETURNING id''',
+                    (target, config.RULE_VERSION, actual, month_id))
+            else:
+                self._rows('UPDATE {payroll_months} SET status=%s WHERE id=%s RETURNING id', (target, month_id))
+            return self._rows('SELECT * FROM {payroll_months} WHERE id=%s', (month_id,))[0]
+
+    def month_actions(self, month_id):
+        table = sql.Identifier(self.schema, 'audit_log')
+        with self.connection.cursor() as cursor:
+            cursor.execute(sql.SQL('''SELECT happened_at,actor,reason,before_record->>'status',
+                after_record->>'status' FROM {} WHERE table_name='payroll_months' AND record_id=%s
+                AND before_record->>'status' IS DISTINCT FROM after_record->>'status' ORDER BY id DESC''').format(table), (month_id,))
+            return cursor.fetchall()
 
 
 def result_frame(results):

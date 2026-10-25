@@ -27,6 +27,7 @@ with st.sidebar:
     for page in pages[:4]:
         st.page_link(page)
     st.divider()
-    st.caption('在线测试 · 请勿录入真实工资' if os.environ.get('APP_MODE') == 'online-test' else '本地工作空间 · 开发版')
+    st.caption({'production':'正式工作台 · 老板专用', 'online-test':'在线测试 · 请勿录入真实工资'}
+               .get(os.environ.get('APP_MODE'), '本地工作空间 · 开发版'))
     st.caption('月度工资保存后可再次打开。尚未保存的表格修改仅留在当前会话。')
 pg.run()
