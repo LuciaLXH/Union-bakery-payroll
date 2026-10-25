@@ -12,6 +12,7 @@ from ui.common import header, db, fetch, show_error, select_store, month_options
 header('UNION BAKERY / MONTHLY PAYROLL', '一起把这个月的工资算清楚', '选好门店与月份，填写员工考勤，再保存并计算。常用工资自动带入，不用每月上传表格。')
 st.markdown('<div class="flow-steps"><span><b>01</b> 选择月份</span><span><b>02</b> 填写考勤与备注</span><span><b>03</b> 保存、计算、查看结果</span></div>', unsafe_allow_html=True)
 flash()
+st.page_link('views/ai_entry_page.py', label='粘贴文字，用 AI 辅助录入考勤和备注', icon=':material/edit_note:')
 with st.container(border=True, key='month_filters'):
     a, b = st.columns(2)
     with a:

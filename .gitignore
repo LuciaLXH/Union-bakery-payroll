@@ -14,3 +14,4 @@ node_modules/
 # Local session history and manual verification screenshots
 .Rhistory
 docs/assets/
+.local/

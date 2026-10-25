@@ -14,6 +14,7 @@ pages = [
     st.Page('views/employees_page.py', title='员工档案', icon=':material/group:'),
     st.Page('views/stores_page.py', title='门店设置', icon=':material/storefront:'),
     st.Page('views/history_page.py', title='核算历史', icon=':material/history:'),
+    st.Page('views/ai_entry_page.py', title='AI 辅助录入', icon=':material/edit_note:'),
     st.Page('views/import_page.py', title='Excel 导入', icon=':material/upload_file:'),
     st.Page('views/editor_page.py', title='表格试算', icon=':material/calculate:'),
     st.Page('views/export_page.py', title='试算导出', icon=':material/download:'),
@@ -23,7 +24,7 @@ with st.sidebar:
     st.markdown('<div class="brand"><span class="brand-name">Union</span>'
                 '<small>BAKERY</small><span class="brand-label">工资小管家</span></div>', unsafe_allow_html=True)
     st.caption('日常工作')
-    for page in pages[:4]:
+    for page in pages[:5]:
         st.page_link(page)
     st.divider()
     st.caption('在线测试 · 请勿录入真实工资' if os.environ.get('APP_MODE') == 'online-test' else '本地工作空间 · 开发版')
