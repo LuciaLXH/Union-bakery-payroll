@@ -83,7 +83,7 @@ if draft:
             '事项': st.column_config.SelectboxColumn(options=KINDS, required=True),
             '数量': st.column_config.NumberColumn(min_value=0, max_value=1000000),
             '单位': st.column_config.SelectboxColumn(options=['分钟', '天', '小时', '元', '']),
-            '处理方式': st.column_config.SelectboxColumn(options=MODES, required=True),
+            '处理方式': st.column_config.SelectboxColumn(options=MODES, required=True, default='新增'),
             '原文 / 备注': st.column_config.TextColumn(width='large'),
             '待核对问题': st.column_config.TextColumn(width='large'),
         })

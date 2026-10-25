@@ -45,9 +45,9 @@ def render(month):
         st.dataframe(pd.DataFrame([{'编号': c, '姓名': n, '门店': stores[c]} for c,n in people.items()]), hide_index=True)
     mode = 'AI 识别'
     text = st.text_area('粘贴本月记录', max_chars=3000, height=140, key='ai_text', value=st.session_state.get('ai_saved_text', ''),
-                        placeholder='例如：小面包本月缺勤3天；杨新宁10月8日迟到10分钟；李四报废了一公斤乳酪。')
+                        placeholder='例如：小面包10月8日请假1天；杨新宁10月8日迟到10分钟。要替换总数可写：小面包本月累计缺勤3天。')
     st.session_state.ai_saved_text = text
-    st.caption('可以写姓名、简称或编号。无日期的月度汇总按本月累计整理；带日期的单次考勤按新增整理，写入前可以修改。')
+    st.caption('默认“新增”：本次数量加到已保存记录。要替换本月总数，请明确写“本月累计”或“总共”。建议写上日期，同一事项只录一次；写入前可修改。')
     st.caption(f'全站本月 AI 预算 ¥{settings.budget_cny}；已用及预留约 ¥{spent/1000000:.4f}。超出预算可手动录入。费用按配置单价估算，以百炼账单为准。')
     if mode == 'AI 识别':
         st.caption('识别会将上方文字与月份发送给千问。请使用测试数据；请勿粘贴身份证、银行账户等无关信息。')
@@ -88,7 +88,7 @@ def render(month):
             '事项': st.column_config.SelectboxColumn(options=KINDS, required=True),
             '数量': st.column_config.NumberColumn(min_value=0, max_value=1000000),
             '单位': st.column_config.SelectboxColumn(options=['分钟','天','小时','元','']),
-            '处理方式': st.column_config.SelectboxColumn(options=MODES, required=True),
+            '处理方式': st.column_config.SelectboxColumn(options=MODES, required=True, default='新增'),
             '原文 / 备注': st.column_config.TextColumn(width='large'),
         }).to_dict('records')
     for row in rows:

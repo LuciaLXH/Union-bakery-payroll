@@ -47,9 +47,11 @@ def header(kicker, title, description):
 
 
 def flash():
+    # Keep the same element position whether or not a save message is present.
+    slot = st.empty()
     message = st.session_state.pop('workspace_flash', None)
     if message:
-        st.success(message)
+        slot.success(message)
 
 
 def select_store(key):
