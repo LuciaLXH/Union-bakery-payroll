@@ -4,6 +4,8 @@ A payroll workspace for a small bakery, developed through owner feedback: reusab
 
 **[Live English demo](https://union-bakery-payroll-portfolio.onrender.com)** · **[中文项目说明](README.zh-CN.md)** · **[Architecture & case study](docs/portfolio-case-study.md)** · **[Product roadmap](docs/product-roadmap.md)**
 
+Development record: [2026-10-25 Chinese AI-entry changes, verification and handover](docs/2026-10-25-ai-entry-handover.md). The Qwen-assisted entry described there is available in the Chinese test workspace, not the public English demo.
+
 The English portfolio demo runs independently of the Chinese owner-testing environment. Both use the same tested Python calculation engine. The public demo contains fictional data only, isolates changes to each visitor’s session and never reads the owner database connection.
 
 ![English portfolio workspace with fictional data](docs/portfolio-assets/english-workspace.png)
