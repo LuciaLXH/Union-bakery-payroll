@@ -121,3 +121,15 @@ class AIPageTests(unittest.TestCase):
             at.text_area[0].set_value('修改后的原文').run()
             self.assertFalse(any(b.label=='写入当月工资记录' for b in at.button))
             self.assertEqual(len(at.exception),0)
+
+
+class IdentityLabelTests(unittest.TestCase):
+    def test_exact_number_with_field_label_matches(self):
+        item = dict(name='员工编号： AI-CHECK-abc123',kind='迟到',amount=10,unit='分钟',
+                    mode='新增',source='员工编号 AI-CHECK-abc123，10月8日迟到10分钟',question='')
+        people={'AI-CHECK-abc123':'虚构员工'};stores={'AI-CHECK-abc123':'虚构门店'}
+        self.assertEqual(review_rows([item],people,stores)[0]['员工编号'],'AI-CHECK-abc123')
+        item['source']='员工编号 AI-CHECK-abc1234，迟到10分钟'
+        self.assertEqual(review_rows([item],people,stores)[0]['员工编号'],'')
+        item['name']='员工编号： AI-CHECK-abc124'
+        self.assertEqual(review_rows([item],people,stores)[0]['员工编号'],'')

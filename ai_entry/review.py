@@ -2,6 +2,7 @@
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import re
 
 from ai_entry.service import EntryError, KINDS, MODES
 
@@ -22,7 +23,15 @@ def review_rows(items, people=None, stores=None):
     stores = STORES if stores is None else stores
     rows = []
     for item in items:
-        matches = [code for code, name in people.items() if name == item['name'] or code == item['name']]
+        identity = item['name'].strip()
+        matches = [code for code, name in people.items() if name == identity or code == identity]
+        if not matches:
+            # Some providers include the explicit field label in the name field.
+            # Strip only that label, require an exact known ID also present in the source.
+            candidate = re.sub(r'^(?:员工编号|编号)\s*[:：]?\s*', '', identity).strip()
+            if candidate != identity and candidate in people and re.search(
+                    r'(?<![A-Za-z0-9_-])' + re.escape(candidate) + r'(?![A-Za-z0-9_-])', item['source']):
+                matches = [candidate]
         issues = [item['question']] if item['question'] else []
         if len(matches) != 1:
             issues.append('姓名同名或未匹配，请手动选择员工编号；不自动纠正姓名。')
