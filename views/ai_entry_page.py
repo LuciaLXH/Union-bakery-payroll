@@ -70,8 +70,7 @@ frame = pd.DataFrame(draft['rows'], columns=COLUMNS)
 frame['数量'] = pd.to_numeric(frame['数量'], errors='coerce').astype(float)
 rows = st.data_editor(frame, key=f"ai_editor_{st.session_state.ai_generation}", num_rows='dynamic',
     hide_index=True, width='stretch', disabled=['所属门店'], column_config={
-        '员工编号': st.column_config.SelectboxColumn(options=list(people), required=True,
-            format_func=lambda c: f'{people[c]} · {c} · {stores[c]}' if c in people else c),
+        '员工编号': st.column_config.SelectboxColumn(options=list(people), required=True),
         '事项': st.column_config.SelectboxColumn(options=KINDS, required=True),
         '数量': st.column_config.NumberColumn(min_value=0, max_value=1000000),
         '单位': st.column_config.SelectboxColumn(options=['分钟','天','小时','元','']),
