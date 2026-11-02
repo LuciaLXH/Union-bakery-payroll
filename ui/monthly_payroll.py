@@ -12,6 +12,10 @@ from ui.common import metrics, money
 from ui.ai_entry import require_written_ai
 
 
+def set_inline_edit(batch_id, enabled):
+    st.session_state[f'month_inline_edit_{batch_id}'] = enabled
+
+
 def save_month(batch_id, calculate):
     buffer = st.session_state['month_buffers'][batch_id]
     try:
@@ -20,6 +24,7 @@ def save_month(batch_id, calculate):
         common.db('save_inputs', batch_id, buffer['frame'], buffer['versions'], calculate=calculate,
                   expected_lifecycle=buffer['lifecycle_version'])
         st.session_state['month_buffers'].pop(batch_id, None)
+        set_inline_edit(batch_id, False)
         st.session_state.monthly_notice = ('已保存并计算本月工资。下方“本月计算结果”可查看明细和下载。'
             if calculate else '填写内容已保存。准备好后，再点击“保存并计算本月工资”。')
     except (ValueError, psycopg.Error) as exc:
@@ -51,6 +56,7 @@ def transition(batch_id, action, version, ids, cap, checkbox_key, reason_key=Non
         common.db('transition_month', batch_id, action, version, calculation_ids=ids,
                   expected_cap=cap, reason=st.session_state.get(reason_key, '') if reason_key else '')
         reload_month(batch_id)
+        set_inline_edit(batch_id, action == 'reopen')
         st.session_state.monthly_notice = {'confirm':'本月工资已确认并锁定。尚未标记发放，不会自动转账。',
             'paid':'已记录您确认的发放状态。本系统未执行转账。',
             'reopen':'已记录更正原因并解除锁定。请更正、核算并重新确认；不会撤销已完成的转账。'}[action]
@@ -97,6 +103,7 @@ def render_payroll(month, stores, entry_mode):
     outdated = (buffer['versions'] != {row['id']: row['input_version'] for row in entries}
                 or buffer['lifecycle_version'] != batch['lifecycle_version'])
     locked = batch['status'] != 'draft'
+    editing = entry_mode == '手动填写' or (not locked and st.session_state.get(f'month_inline_edit_{batch["id"]}', False))
     results = view['results']
     complete = (bool(entries) and len(results) == len(entries) and not dirty and not outdated
                 and all(row['net_pay'] >= 0 for row in results))
@@ -171,7 +178,7 @@ def render_payroll(month, stores, entry_mode):
 
 
     with st.container(border=True, key='month_entry'):
-        st.subheader('手动填写考勤与备注' if entry_mode == '手动填写' else '核对已保存的考勤与备注')
+        st.subheader('手动填写考勤与备注' if editing else '核对已保存的考勤与备注')
         if locked:
             st.info('这个月已确认，当前页面只供查看。')
         elif outdated:
@@ -179,10 +186,15 @@ def render_payroll(month, stores, entry_mode):
         elif dirty:
             st.warning('有未保存的填写内容。填好所有员工后，点击下方黄色按钮保存并计算。')
         elif complete:
-            st.caption('当前填写已保存并计算。需要更正时，修改下方内容后再次保存并计算。')
+            st.caption('当前填写已保存并计算。修改后请再次保存并计算。' if editing else
+                       '当前填写已保存并计算。需要更正时，点击下方“修改考勤与备注”。')
         else:
             st.caption('填写已保存，但工资尚未计算。核对后点击下方黄色按钮。')
-        if entries and entry_mode == '手动填写':
+        if entries and editing:
+            if entry_mode == 'AI 识别':
+                st.caption('直接修改下面的数字或备注，再点击“保存并计算本月工资”。上方的 AI 录入内容会保留。')
+                st.button('返回核对表', disabled=dirty, help='有未保存的修改时，请先保存。',
+                          on_click=set_inline_edit, args=(batch['id'], False))
             mode = st.radio('填写方式', ['按员工填写', '表格批量编辑'], horizontal=True, key='monthly_input_mode')
             prefix = f'input_{batch["id"]}_{generation}_{buffer["revision"]}'
             if mode == '按员工填写':
@@ -232,8 +244,11 @@ def render_payroll(month, stores, entry_mode):
                     column_order=order, column_config=columns,
                     disabled=True if locked or outdated else ['员工编号','姓名','分店','岗位','职级','入职时间'],
                     hide_index=True, width='stretch', height='auto')
-        if entries and entry_mode == 'AI 识别':
-            st.caption('下表为本店已保存或手动填写的月度记录。需要直接改数字时，可切换上方“手动填写”。')
+        if entries and not editing:
+            st.button('修改考勤与备注', type='primary', icon=':material/edit:',
+                      disabled=locked or outdated, on_click=set_inline_edit, args=(batch['id'], True))
+            st.caption('本月已锁定。请先在下方更正入口填写原因并解除锁定。' if locked else
+                       '下表供核对。点击“修改考勤与备注”，即可在这里编辑，无需返回页面顶部。')
             st.dataframe(buffer['frame'][['姓名','员工编号','普通缺勤天数','旷工天数','迟到','有效加班时长','工作失误项目']],
                          hide_index=True, width='stretch')
         if entries:
