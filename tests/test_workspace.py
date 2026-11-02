@@ -144,6 +144,7 @@ class WorkspacePageTests(DatabaseFixture):
         self.env_patch.start()
         self.addCleanup(self.env_patch.stop)
         self.at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=20).run()
+        next(w for w in self.at.selectbox if w.label=='工资月份').set_value(date(2026,10,1)).run()
         next(w for w in self.at.radio if w.label=='录入方式').set_value('手动填写').run()
         self.assertEqual(len(self.at.exception),0)
 
@@ -164,15 +165,12 @@ class WorkspacePageTests(DatabaseFixture):
             next(w for w in self.at.radio if w.label=='录入方式').set_value('AI 识别').run()
             self.assertFalse(any(w.label=='选择要填写的员工' for w in self.at.selectbox))
             next(w for w in self.at.text_area if w.label=='粘贴本月记录').set_value(item['source'])
-            self.button('识别文字').click().run()
-            self.button('预览写入变更').click().run()
-            next(w for w in self.at.checkbox if '我已核对所属门店' in w.label).check().run()
-            self.button('写入当月工资记录').click().run()
+            self.button('整理记录').click().run()
+            self.button('确认以上记录并计算工资').click().run()
             self.assertEqual(len(self.at.exception),0)
             buffer=next(iter(self.at.session_state['month_buffers'].values()))
             self.assertEqual(buffer['frame'].iloc[0]['迟到'],17)
             self.assertTrue(buffer['frame'].equals(buffer['base']))
-            self.button('保存并计算本月工资').click().run()
             self.assertEqual(len(self.at.exception),0)
             repo=PayrollWorkspace(self.connection,schema=self.schema)
             result=repo.current_results(repo.months(repo.stores()[0]['id'])[0]['id'])[0]
@@ -190,6 +188,7 @@ class WorkspacePageTests(DatabaseFixture):
         self.assertEqual(len(self.at.get('download_button')),1)
         fresh=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py')).run()
         self.assertEqual(len(fresh.exception),0)
+        next(w for w in fresh.selectbox if w.label=='工资月份').set_value(date(2026,10,1)).run()
         self.assertEqual(len(fresh.get('download_button')),1)
 
     def test_unsaved_changes_hide_export_then_save(self):

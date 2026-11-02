@@ -9,11 +9,14 @@ from core.workspace import entry_frame, result_frame
 from core.excel_handler import export_payroll_to_excel
 from ui import common
 from ui.common import metrics, money
+from ui.ai_entry import require_written_ai
 
 
 def save_month(batch_id, calculate):
     buffer = st.session_state['month_buffers'][batch_id]
     try:
+        if calculate:
+            require_written_ai(st.session_state.get('monthly_month'))
         common.db('save_inputs', batch_id, buffer['frame'], buffer['versions'], calculate=calculate,
                   expected_lifecycle=buffer['lifecycle_version'])
         st.session_state['month_buffers'].pop(batch_id, None)
@@ -40,6 +43,8 @@ def transition(batch_id, action, version, ids, cap, checkbox_key, reason_key=Non
     try:
         if not st.session_state.get(checkbox_key):
             raise ValueError('请先勾选核对确认。')
+        if action in ('confirm', 'paid'):
+            require_written_ai(st.session_state.get('monthly_month'))
         buffer = st.session_state.get('month_buffers', {}).get(batch_id)
         if buffer and not buffer['frame'].equals(buffer['base']):
             raise ValueError('仍有未保存的修改，请先保存并计算。')

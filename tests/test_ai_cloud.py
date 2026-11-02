@@ -53,11 +53,78 @@ class AICloudTests(DatabaseFixture):
         with self.assertRaisesRegex(ValueError,'尚未接入'):
             self.repo.prepare('2026-10',[row])
 
+    def test_mixed_leave_waste_and_lateness_reach_results_and_excel(self):
+        from datetime import date
+        from io import BytesIO
+        import pandas as pd
+        from core.workspace import result_frame
+        from core.excel_handler import export_payroll_to_excel
+        store = self.repo.stores()[0]
+        first = self.repo.employees(store['id'])[0]
+        self.repo.save_employee(store['id'], dict(first, employee_code='TEST-002', name='虚构小杨'))
+        self.repo.start_month(store['id'], date(2026,10,1))
+        self.connection.execute('UPDATE payroll_entries SET ordinary_absence_days=0,late_minutes=0,overtime_hours=0')
+        items = [dict(name='TEST-001',kind='普通缺勤',amount=1,unit='天',mode='新增',source='TEST-001 10月1日请假一天',question=''),
+                 dict(name='TEST-002',kind='备注',amount=None,unit='',mode='不适用',source='TEST-002报废200g面粉',question=''),
+                 dict(name='TEST-002',kind='迟到',amount=15,unit='分钟',mode='新增',source='TEST-002 10月21日迟到15分钟',question='')]
+        catalog=self.repo.catalog()
+        rows=review_rows(items,{e['employee_code']:e['name'] for e in catalog},
+                         {e['employee_code']:e['store_name'] for e in catalog})
+        before=self.repo.save(store_name=store['name'],payroll_month=date(2026,10,1))
+        self.assertEqual([r['net_pay'] for r in before],[5400,5400])
+        preview=self.repo.prepare('2026-10',rows)
+        self.repo.apply('2026-10',rows,preview['token'],calculate=True)
+        mid=self.repo.months()[0]['id']
+        self.assertEqual([r['net_pay'] for r in self.repo.current_results(mid)],[5220,5385])
+        self.assertEqual([r['本次确认后预计实发'] for r in preview['impacts']],[5220,5385])
+        results=self.repo.save(store_name=store['name'],payroll_month=date(2026,10,1))
+        self.assertEqual([r['net_pay'] for r in results],[5220,5385])
+        self.assertEqual(results[0]['total_deductions'],180)
+        self.assertEqual(results[1]['late_deduction'],15)
+        export=pd.read_excel(BytesIO(export_payroll_to_excel(result_frame(self.repo.current_results(mid)))))
+        self.assertEqual(export['合计'].tolist(),[5220,5385])
+        self.assertIn('200g面粉',export.iloc[1]['工作失误项目'])
+        self.assertIn('10月21日',export.iloc[1]['工作失误项目'])
+
     def test_catalog_change_invalidates_preview(self):
         rows=[record()];p=self.repo.prepare('2026-10',rows)
         self.connection.execute("UPDATE employees SET name='改名员工'")
         with self.assertRaisesRegex(ValueError,'已变化'):
             self.repo.apply('2026-10',rows,p['token'])
+
+    def test_combined_calculate_failure_rolls_back_every_store_and_event(self):
+        from datetime import date
+        from unittest.mock import patch
+        other=self.repo.add_store('另一门店')
+        first=self.repo.employees(self.repo.stores()[0]['id'])[0]
+        self.repo.save_employee(other['id'],dict(first,employee_code='TEST-002',name='另一员工'))
+        self.repo.start_month(other['id'],date(2026,10,1))
+        rows=[record(),dict(record(),员工编号='TEST-002')]
+        preview=self.repo.prepare('2026-10',rows)
+        original=self.repo.save
+        def fail_second(**kwargs):
+            if kwargs['store_name']=='另一门店':
+                raise ValueError('模拟第二店计算失败')
+            return original(**kwargs)
+        with patch.object(self.repo,'save',side_effect=fail_second):
+            with self.assertRaisesRegex(ValueError,'计算失败'):
+                self.repo.apply('2026-10',rows,preview['token'],True)
+        self.assertEqual(self.connection.execute('SELECT count(*) FROM payroll_calculations').fetchone()[0],0)
+        self.assertEqual(self.connection.execute('SELECT count(*) FROM ai_entry_events').fetchone()[0],0)
+        self.assertEqual(self.repo.entries(self.repo.months()[0]['id'])[0]['input_version'],1)
+        self.repo.apply('2026-10',rows,preview['token'],True)
+        self.assertEqual(self.connection.execute('SELECT count(*) FROM payroll_calculations').fetchone()[0],2)
+        with self.assertRaisesRegex(ValueError,'相同事项'):
+            self.repo.apply('2026-10',rows,preview['token'],True)
+
+    def test_combined_calculate_rejects_negative_pay_without_saving(self):
+        row=dict(record(),事项='旷工',数量=30,单位='天',处理方式='累计')
+        self.change('ordinary_absence_days=0')
+        preview=self.repo.prepare('2026-10',[row])
+        with self.assertRaisesRegex(ValueError,'负'):
+            self.repo.apply('2026-10',[row],preview['token'],True)
+        self.assertEqual(self.connection.execute('SELECT unauthorized_absence_days FROM payroll_entries').fetchone()[0],0)
+        self.assertEqual(self.connection.execute('SELECT count(*) FROM ai_entry_events').fetchone()[0],0)
 
     def test_cross_store_failure_rolls_back_first_store(self):
         from core.workspace import entry_frame
@@ -101,36 +168,35 @@ class AIPageTests(unittest.TestCase):
              patch('ai_entry.service.Settings.from_env',return_value=Settings(key='test',provider='qwen')), \
              patch('ui.ai_entry.extract',return_value=[item]):
             repo.return_value.catalog.return_value=[employee]
-            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[{'员工':'虚构员工','写入后':'10'}])
+            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[],impacts=[{'员工':'虚构员工','实发变化':-10}],scope=[{'门店':'隔离测试门店','store_id':1,'month_id':1,'计算人数':1,'预计全店实发':5390}])
             repo.return_value.apply.return_value=1
             budget.return_value.spent.return_value=0
             at=AppTest.from_file(str(ROOT/'app.py')).run()
             self.assertEqual(len(at.exception),0)
             self.assertEqual(at.radio[0].value,'AI 识别')
             at.text_area[0].set_value('TEST-001迟到10分钟')
-            next(b for b in at.button if b.label=='识别文字').click().run()
-            next(b for b in at.button if b.label=='预览写入变更').click().run()
+            next(b for b in at.button if b.label=='整理记录').click().run()
+            self.assertTrue(any('核对下面' in w.value for w in at.info))
             self.assertEqual(len(at.exception),0)
-            self.assertTrue(next(b for b in at.button if b.label=='写入当月工资记录').disabled)
-            at.checkbox[0].check().run()
+            self.assertFalse(next(b for b in at.button if b.label=='确认以上记录并计算工资').disabled)
             import pandas as pd
             at.session_state['month_buffers'] = {99: {'frame':pd.DataFrame({'迟到':[20]}), 'base':pd.DataFrame({'迟到':[0]})}}
             at.run()
-            self.assertTrue(next(b for b in at.button if b.label=='写入当月工资记录').disabled)
+            self.assertTrue(next(b for b in at.button if b.label=='确认以上记录并计算工资').disabled)
             repo.return_value.apply.assert_not_called()
             at.session_state['month_buffers'] = {}
             at.run()
-            next(b for b in at.button if b.label=='写入当月工资记录').click().run()
+            next(b for b in at.button if b.label=='确认以上记录并计算工资').click().run()
             repo.return_value.apply.assert_called_once()
-            self.assertTrue(any('已写入 1' in s.value for s in at.success))
-            next(b for b in at.button if b.label=='识别文字').click().run()
+            self.assertTrue(any('已保存 1' in s.value for s in at.success))
+            next(b for b in at.button if b.label=='整理记录').click().run()
             at.session_state['ai_current_rows'][0]['数量'] = 15.0
             next(r for r in at.radio if r.label=='录入方式').set_value('手动填写').run()
             next(r for r in at.radio if r.label=='录入方式').set_value('AI 识别').run()
             self.assertEqual(at.text_area[0].value,'TEST-001迟到10分钟')
             self.assertEqual(at.session_state['ai_draft']['rows'][0]['数量'],15.0)
             at.text_area[0].set_value('修改后的原文').run()
-            self.assertFalse(any(b.label=='写入当月工资记录' for b in at.button))
+            self.assertFalse(any(b.label=='确认以上记录并计算工资' for b in at.button))
             self.assertEqual(len(at.exception),0)
 
 
@@ -183,25 +249,23 @@ class NaturalIdentityTests(unittest.TestCase):
              patch('ai_entry.service.Settings.from_env',return_value=Settings(key='test',provider='qwen')), \
              patch('ui.ai_entry.extract',return_value=[item]):
             repo.return_value.catalog.return_value=[employee, dict(employee, employee_code='D2', name='杨锡宁', store_name='二店')]
-            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[{'员工':'示例小面包','写入后':'3'}])
+            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[],impacts=[{'员工':'示例小面包','实发变化':-540}],scope=[{'门店':'一店','store_id':1,'month_id':1,'计算人数':1,'预计全店实发':4860}])
             budget.return_value.spent.return_value=0
             at=AppTest.from_file(str(ROOT/'app.py')).run()
             at.text_area[0].set_value(item['source'])
-            next(b for b in at.button if b.label=='识别文字').click().run()
+            next(b for b in at.button if b.label=='整理记录').click().run()
             self.assertFalse(at.exception)
             editor=next(d for d in at.dataframe if '员工' in d.value.columns)
             self.assertIn('示例小面包 · 一店',editor.value.iloc[0]['员工'])
-            next(b for b in at.button if b.label=='预览写入变更').click().run()
             rows=repo.return_value.prepare.call_args.args[1]
             self.assertEqual(rows[0]['员工编号'],'D1')
             self.assertEqual(rows[0]['所属门店'],'一店')
             self.assertFalse(at.exception)
             at.session_state['ai_editor_1'] = {'edited_rows':{0:{'员工':'杨锡宁 · 二店 · D2'}}, 'added_rows':[], 'deleted_rows':[]}
             at.run()
-            self.assertFalse(any(b.label=='写入当月工资记录' for b in at.button))
+            self.assertTrue(any(b.label=='确认以上记录并计算工资' for b in at.button))
             # AppTest has no editable-dataframe client; supply its widget delta for this rerun too.
             at.session_state['ai_editor_1'] = {'edited_rows':{0:{'员工':'杨锡宁 · 二店 · D2'}}, 'added_rows':[], 'deleted_rows':[]}
-            next(b for b in at.button if b.label=='预览写入变更').click().run()
             changed=repo.return_value.prepare.call_args.args[1][0]
             self.assertEqual(changed['员工编号'],'D2')
             self.assertEqual(changed['所属门店'],'二店')
@@ -214,7 +278,7 @@ class WriteCallbackTests(unittest.TestCase):
         preview = dict(token='token', context=('2026-10', 'AI 识别', '原文'),
                        editor_key='editor', editor_state={'edited_rows': {}}, month_ids=[1])
         for change in ({'ai_text': '新原文'}, {'monthly_month': date(2026, 11, 1)},
-                       {'editor': {'edited_rows': {0: {'数量': 99}}}}, {'ai_write_checked_token': False}):
+                       {'editor': {'edited_rows': {0: {'数量': 99}}}}, {'ai_receipt': {'count':1}}):
             with self.subTest(change=change):
                 state = dict(ai_text='原文', monthly_month=date(2026, 10, 1),
                              editor={'edited_rows': {}}, ai_write_checked_token=True)

@@ -174,6 +174,7 @@ class LifecyclePageTests(DatabaseFixture):
         self.addCleanup(cleanup)
         with patch('ui.common.DB_SCHEMA',self.schema), patch.dict(os.environ, DATABASE_URL=os.environ['TEST_DATABASE_URL'], APP_MODE='local', RENDER=''):
             at=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'), default_timeout=20).run()
+            next(w for w in at.selectbox if w.label=='工资月份').set_value(date(2026,10,1)).run()
             button=lambda label: next(b for b in at.button if b.label==label)
             checkbox=lambda text: next(b for b in at.checkbox if text in b.label)
             button('保存并计算本月工资').click().run()

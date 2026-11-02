@@ -14,8 +14,10 @@ if not stores:
     st.page_link('views/stores_page.py', label='建立门店')
     st.stop()
 options, current = month_options(fetch('months'))
-month = st.selectbox('工资月份', options, index=options.index(current),
+remembered = st.session_state.get('selected_payroll_month', current)
+month = st.selectbox('工资月份', options, index=options.index(remembered if remembered in options else current),
     format_func=lambda value: value.strftime('%Y 年 %m 月'), key='monthly_month')
+st.session_state['selected_payroll_month'] = month
 entry_mode = st.radio('录入方式', ['AI 识别', '手动填写'], horizontal=True, key='monthly_entry_mode', on_change=preserve_draft)
 if entry_mode == 'AI 识别':
     render_ai_entry(month.strftime('%Y-%m'))

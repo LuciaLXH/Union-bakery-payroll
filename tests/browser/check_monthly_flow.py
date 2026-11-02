@@ -94,33 +94,27 @@ try:
                 page.evaluate("window.payrollNode=document.querySelector('.st-key-month_entry')")
                 start = len(reads())
                 page.get_by_label('粘贴本月记录', exact=True).fill(f'虚构员工10月{8+cycle}日迟到5分钟')
-                button('识别文字').click()
-                expect(button('预览写入变更')).to_be_enabled()
-                button('预览写入变更').click()
-                checkbox = page.get_by_text('我已核对所属门店、员工、月份、数量及新增/累计方式', exact=True)
-                before = position_action(checkbox)
-                checkbox.click()
-                expect(button('写入当月工资记录')).to_be_enabled()
-                checkbox_scroll = check_scroll(before)
-                assert page.evaluate("window.payrollNode===document.querySelector('.st-key-month_entry')")
-                assert not any(r['kind']=='payroll' for r in reads()[start:]), reads()[start:]
-                before = position_action(button('写入当月工资记录'))
-                button('写入当月工资记录').click()
-                expect(page.get_by_text('已写入 1 条事项及原文。', exact=False)).to_be_visible()
-                expect(button('写入当月工资记录')).to_be_disabled()
-                write_scroll = check_scroll(before)
-                page.evaluate("window.aiNode=document.querySelector('.st-key-monthly_ai_entry')")
-                start = len(reads())
-                before = position_action(button('保存并计算本月工资'))
+                button('整理记录').click()
+                expect(button('确认以上记录并计算工资')).to_be_enabled()
+                if cycle == 0:
+                    before_calculate = len(reads())
+                    button('保存并计算本月工资').click()
+                    expect(page.get_by_text('上方还有未确认的记录，尚未计入工资。', exact=False)).to_be_visible()
+                    assert not any(r.get('method') == 'save_inputs' for r in reads()[before_calculate:])
+                    expect(page.get_by_role('heading', name='本月计算结果', exact=True)).to_have_count(0)
+                action = '先保存，稍后计算' if cycle == 1 else '确认以上记录并计算工资'
+                before = position_action(button(action))
                 started = time.monotonic()
-                button('保存并计算本月工资').click()
+                button(action).click()
+                expect(page.get_by_text('已保存 1 条记录', exact=False)).to_be_visible()
+                expect(button('确认以上记录并计算工资')).to_be_disabled()
+                action_scroll = check_scroll(before)
+                if cycle == 1:
+                    expect(page.get_by_role('heading', name='本月计算结果', exact=True)).to_have_count(0)
+                    button('保存并计算本月工资').click()
                 expect(page.get_by_role('heading', name='本月计算结果', exact=True)).to_be_visible()
-                calc_scroll = check_scroll(before)
-                assert page.evaluate("window.aiNode===document.querySelector('.st-key-monthly_ai_entry')")
-                actions = reads()[start:]
-                assert actions == [{'kind':'payroll','method':'save_inputs'}, {'kind':'payroll','method':'month_view'}], actions
-                results.append(dict(cycle=cycle+1, checkbox=checkbox_scroll, write=write_scroll,
-                                    calculate=calc_scroll, calculate_seconds=round(time.monotonic()-started,2)))
+                results.append(dict(cycle=cycle+1, action=action, scroll=action_scroll,
+                                    seconds=round(time.monotonic()-started,2)))
             cards = page.evaluate('() => {clearInterval(window.cardWatch);return window.cards}')
             assert max(cards) == 1, max(cards)
             with psycopg.connect(os.environ['TEST_DATABASE_URL']) as db:

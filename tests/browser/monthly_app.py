@@ -4,6 +4,8 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
 import streamlit as st
+from datetime import date
+st.session_state.setdefault('monthly_month', date(2026,10,1))
 from ui import common,ai_entry
 from ai_entry.service import Settings
 common.DB_SCHEMA=os.environ['PAYROLL_BROWSER_SCHEMA']

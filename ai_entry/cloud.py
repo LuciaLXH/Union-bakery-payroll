@@ -13,6 +13,8 @@ from ai_entry.monthly import event_key
 from ai_entry.review import confirm_rows
 from ai_entry.service import Budget, EntryError
 from core.workspace import PayrollWorkspace, entry_frame
+from core.payroll_calc import calculate_payroll
+import config
 
 FIELDS = {'迟到': '迟到', '普通缺勤': '普通缺勤天数', '旷工': '旷工天数',
           '加班': '有效加班时长', '通勤补贴': '通勤补贴'}
@@ -69,16 +71,17 @@ class AIWorkspace(PayrollWorkspace):
         records, _ = confirm_rows(records, str(month), people, stores)
         employees = {e['employee_code']: e for e in catalog}
         store_ids = sorted({employees[r['员工编号']]['store_id'] for r in records})
-        plans, changes, evidence = [], [], []
+        plans, changes, evidence, impacts, scope = [], [], [], [], []
         for store_id in store_ids:
             batches = [m for m in self.months(store_id) if m['payroll_month'] == month]
             if not batches:
-                raise EntryError(f"{next(e['store_name'] for e in catalog if e['store_id']==store_id)} 尚未建立该月工资。请在本页下方选择该门店并建立本月工资，再预览。")
+                raise EntryError(f"{next(e['store_name'] for e in catalog if e['store_id']==store_id)} 尚未建立该月工资。请在本页下方建立本月工资，再点击“更新核对结果”。")
             batch = batches[0]
             if batch['status'] != 'draft':
-                raise EntryError('该月份已确认，不能写入。')
+                raise EntryError('该月份已确认并锁定。请先按更正流程解除锁定，再保存新记录。')
             entries = self.entries(batch['id'])
             frame = entry_frame(entries, next(e['store_name'] for e in catalog if e['store_id']==store_id))
+            before_pay = calculate_payroll(frame, decimal_output=True)
             relevant = [r for r in records if employees[r['员工编号']]['store_id']==store_id]
             touched = {}
             for row in relevant:
@@ -116,14 +119,28 @@ class AIWorkspace(PayrollWorkspace):
                     raise EntryError('普通缺勤与旷工合计不能超过30天。')
                 if self._rows('SELECT fingerprint FROM {ai_events} WHERE payroll_month=%s AND fingerprint=%s',
                               (month, event_key(row))):
-                    raise EntryError('存在已经写入的相同事项，整批未写入。请删除重复行再预览。')
+                    raise EntryError('存在已经保存的相同事项，本批记录未重复保存。请删除重复行后再确认。')
+            after_pay = calculate_payroll(frame, decimal_output=True)
+            affected = {r['员工编号'] for r in relevant}
+            for i, entry in enumerate(entries):
+                if entry['employee_code_snapshot'] in affected:
+                    before, after = before_pay.iloc[i], after_pay.iloc[i]
+                    impacts.append({'员工': after['姓名'], '门店': after['分店'],
+                        '原实发试算': before['合计'], '本次确认后预计实发': after['合计'],
+                        '实发变化': after['合计'] - before['合计'],
+                        '缺勤及旷工扣款': sum(after[c] for c in ('工资扣款','绩效扣款','全勤扣款')),
+                        '迟到扣款': after['迟到扣款'], '加班费': after['加班费']})
+            scope.append({'门店': frame.iloc[0]['分店'], 'store_id': store_id,
+                          'month_id': batch['id'], '计算人数': len(entries),
+                          '预计全店实发': sum(after_pay['合计'], Decimal(0))})
             plans.append((batch['id'], frame, {e['id']:e['input_version'] for e in entries}))
             evidence.append([batch, entries])
-        signature = hashlib.sha256(json.dumps([month, records, catalog, evidence], default=str,
+        signature = hashlib.sha256(json.dumps([config.RULE_VERSION, month, records, catalog, evidence], default=str,
                                               ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-        return dict(month=month, records=records, token=signature, plans=plans, changes=changes)
+        return dict(month=month, records=records, token=signature, plans=plans, changes=changes,
+                    impacts=impacts, scope=scope)
 
-    def apply(self, month, records, expected):
+    def apply(self, month, records, expected, calculate=False):
         with self.connection.transaction():
             # Serialize AI imports; regular editors are protected by save_inputs' row/version checks.
             self.connection.execute('SELECT pg_advisory_xact_lock(736820042)')
@@ -133,9 +150,9 @@ class AIWorkspace(PayrollWorkspace):
             self._rows('SELECT id FROM {employees} ORDER BY id FOR UPDATE')
             preview = self.prepare(month, records)
             if preview['token'] != expected:
-                raise EntryError('档案或月度数据已变化，请重新预览后再写入。')
+                raise EntryError('档案或月度数据已变化，本批记录未保存。请更新核对结果后再确认。')
             for month_id, frame, versions in preview['plans']:
-                self.save_inputs(month_id, frame, versions)
+                self.save_inputs(month_id, frame, versions, calculate=calculate)
             for row in preview['records']:
                 self._rows('INSERT INTO {ai_events}(payroll_month,fingerprint,record) VALUES(%s,%s,%s) RETURNING fingerprint',
                            (preview['month'], event_key(row), Jsonb(row)))
