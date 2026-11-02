@@ -39,7 +39,7 @@ h2,h3 {color:var(--ink);}
 .st-key-payroll_cap_settings {background:#e5eff2;border:2px solid #7295a9!important;border-radius:12px;}
 .st-key-payroll_cap_settings h3 {font-size:21px;padding:0 0 4px;}
 
-.st-key-payroll_final_confirmation {background:#fff2bf;border:2px solid #9b6b1b!important;border-top:6px solid #9b6b1b!important;border-radius:12px;padding:20px!important;}
+.st-key-payroll_final_confirmation {background:#fff2bf;border:2px solid #9b6b1b!important;border-top:6px solid #9b6b1b!important;border-radius:12px;}
 .st-key-payroll_final_confirmation h3 {color:#65450e;font-size:24px;}
 .st-key-payroll_final_confirmation [data-testid="stCheckbox"] {background:#fffdf6;border:1px solid #b79347;border-radius:8px;padding:12px;}
 .st-key-payroll_final_confirmation [data-testid="stCheckbox"] p {font-weight:650;}
@@ -47,6 +47,6 @@ h2,h3 {color:var(--ink);}
 .st-key-payroll_final_confirmation button[kind="primary"]:hover:not(:disabled) {background:#16384f!important;}
 .st-key-payroll_final_confirmation button[kind="primary"]:disabled {background:#e3e7e8!important;color:#66737b!important;border-color:#aab5bc!important;}
 .st-key-payroll_final_confirmation [data-testid="stCaptionContainer"] {color:#64583c;}
-.st-key-payroll_locked_status {background:#e7f2ed;border:2px solid #497760!important;border-radius:12px;padding:20px!important;}
+.st-key-payroll_locked_status {background:#e7f2ed;border:2px solid #497760!important;border-radius:12px;}
 .st-key-payroll_locked_status h3 {color:#27553e;}
-@media(max-width:800px) {.st-key-payroll_final_confirmation,.st-key-payroll_locked_status {padding:14px!important;}.st-key-payroll_final_confirmation h3 {font-size:22px;}}
+@media(max-width:800px) {.st-key-payroll_final_confirmation h3 {font-size:22px;}}
