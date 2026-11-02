@@ -275,20 +275,31 @@ def render_payroll(month, stores, entry_mode):
             version = batch['lifecycle_version']
             ids = [r['id'] for r in results]
             if not locked:
-                st.write('核对完成后，确认并锁定本月工资。')
-                key = f'confirm_month_{batch["id"]}_{version}_{"_".join(map(str, ids))}_{cap}'
-                checked = st.checkbox('我已核对员工名单、考勤、金额及需另行处理的调整，确认本月工资', key=key)
-                st.button('确认并锁定本月工资', disabled=not checked, on_click=transition,
-                    args=(batch['id'], 'confirm', version, ids, cap, key))
-                st.caption('锁定后不能直接修改或 AI 写入。报废、奖罚和月中入离职折算尚未自动处理，请确认已完成必要核对。')
+                with st.container(border=True, key='payroll_final_confirmation'):
+                    st.subheader('最后一步 · 确认并锁定', anchor=False)
+                    st.write(f'**{store["name"]} · {month:%Y年%m月} · {len(entries)} 人 · 实发合计 {money(total)}**')
+                    st.write('锁定后，本月工资和考勤将不能直接修改。请完成最后核对，再点击下方锁定按钮。')
+                    key = f'confirm_month_{batch["id"]}_{version}_{"_".join(map(str, ids))}_{cap}'
+                    checked = st.checkbox('我已核对员工名单、考勤、金额及需另行处理的调整，确认本月工资', key=key)
+                    st.button('确认并锁定本月工资', type='primary', icon=':material/lock:',
+                        width='stretch', disabled=not checked, on_click=transition,
+                        args=(batch['id'], 'confirm', version, ids, cap, key))
+                    st.caption('锁定不代表已经发薪，也不会转账。报损、奖罚和月中入离职折算尚未自动处理。')
+                    st.caption('锁定后发现错误？可填写更正原因，解除锁定后修改、重新计算并确认。旧版本保留供核对，目前不支持一键恢复上一版。')
             else:
-                st.info('本月工资已锁定，确认时的计算结果会保留。确认和发放标记均不会执行转账。')
+                with st.container(border=True, key='payroll_locked_status'):
+                    st.subheader('🔒 本月工资已锁定', anchor=False)
+                    st.write(f'**{store["name"]} · {month:%Y年%m月} · {len(entries)} 人 · 实发合计 {money(total)}**')
+                    st.write('工资和考勤已锁定，不能直接修改。确认时的结果会保留；需要修改时，请使用下方更正入口。')
+                    st.caption('已标记在系统外完成发放；本系统未执行转账。' if batch['status'] == 'paid' else '尚未标记发放；锁定不会自动转账。')
                 if batch['status'] == 'confirmed':
                     key = f'paid_month_{batch["id"]}_{version}'
                     checked = st.checkbox('我已在系统外完成本月工资发放，只记录状态', key=key)
                     st.button('标记已发放', disabled=not checked, on_click=transition,
                         args=(batch['id'], 'paid', version, ids, cap, key))
                 with st.expander('需要更正已确认的工资'):
+                    st.write('填写原因并解除锁定 → 修改记录 → 重新计算 → 再次确认并锁定。')
+                    st.caption('解除锁定会保留当前填写，不会恢复上一版。可到“核算历史”查看旧值，再更正本月记录；旧核算和确认记录都会保留。')
                     reason_key = f'reopen_reason_{batch["id"]}_{version}'
                     reason = st.text_area('更正原因', key=reason_key, max_chars=1000)
                     key = f'reopen_month_{batch["id"]}_{version}'
