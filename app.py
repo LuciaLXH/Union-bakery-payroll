@@ -3,6 +3,7 @@ from pathlib import Path
 import streamlit as st
 from core.workflow import initialize
 from ui.access import require_test_access
+from ui.read_cache import clear_reads
 import os
 
 st.set_page_config(page_title="Union Bakery · 工资工作台", page_icon="🍞", layout="wide")
@@ -30,4 +31,7 @@ with st.sidebar:
     st.caption({'production':'正式工作台 · 老板专用', 'online-test':'在线测试 · 请勿录入真实工资'}
                .get(os.environ.get('APP_MODE'), '本地工作空间 · 开发版'))
     st.caption('月度工资保存后可再次打开。尚未保存的表格修改仅留在当前会话。')
+if st.session_state.get('_display_page') != pg.title:
+    clear_reads()
+    st.session_state['_display_page'] = pg.title
 pg.run()

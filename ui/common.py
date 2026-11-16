@@ -9,6 +9,7 @@ import streamlit as st
 
 from core.workspace import PayrollWorkspace
 from core.production import bind_connection
+from ui.read_cache import read, clear_reads
 
 DB_SCHEMA = 'public'
 
@@ -23,7 +24,10 @@ def db(method, *args, **kwargs):
         # Transaction-local settings also work through Neon's PgBouncer pool.
         connection.execute('SET LOCAL lock_timeout = 5000; SET LOCAL statement_timeout = 30000')
         bind_connection(connection, schema=DB_SCHEMA)
-        return getattr(PayrollWorkspace(connection, schema=DB_SCHEMA), method)(*args, **kwargs)
+        result = getattr(PayrollWorkspace(connection, schema=DB_SCHEMA), method)(*args, **kwargs)
+    if method.startswith(('save', 'add', 'start', 'set', 'transition')):
+        clear_reads()
+    return result
 
 
 def show_error(exc):
@@ -39,6 +43,9 @@ def show_error(exc):
 
 def fetch(method, *args, **kwargs):
     try:
+        if method in ('stores', 'months'):
+            return read((method, args, tuple(sorted(kwargs.items()))),
+                        lambda: db(method, *args, **kwargs), schema=DB_SCHEMA)
         return db(method, *args, **kwargs)
     except (ValueError, psycopg.Error) as exc:
         show_error(exc)

@@ -6,7 +6,8 @@ import psycopg
 import streamlit as st
 
 from core.workspace import entry_frame, result_frame
-from core.excel_handler import export_payroll_to_excel
+from ui.payroll_download import download_data
+from ui.pay_review import render_cards, attendance_summary
 from ui import common
 from ui.common import metrics, money
 from ui.ai_entry import require_written_ai
@@ -248,9 +249,12 @@ def render_payroll(month, stores, entry_mode):
             st.button('修改考勤与备注', type='primary', icon=':material/edit:',
                       disabled=locked or outdated, on_click=set_inline_edit, args=(batch['id'], True))
             st.caption('本月已锁定。请先在下方更正入口填写原因并解除锁定。' if locked else
-                       '下表供核对。点击“修改考勤与备注”，即可在这里编辑，无需返回页面顶部。')
-            st.dataframe(buffer['frame'][['姓名','员工编号','普通缺勤天数','旷工天数','迟到','有效加班时长','工作失误项目']],
-                         hide_index=True, width='stretch')
+                       '点击“修改考勤与备注”，即可在这里编辑，无需返回页面顶部。')
+            if not complete:
+                for record in buffer['frame'].to_dict('records'):
+                    st.text(f"{record['姓名']} · {attendance_summary(record)}")
+                    if record.get('工作失误项目'):
+                        st.text('备注：' + str(record['工作失误项目']))
         if entries:
             st.divider()
             st.write('核对本店本月记录后，保存并计算工资。')
@@ -272,18 +276,18 @@ def render_payroll(month, stores, entry_mode):
             details['确认状态'] = {'draft':'核算草稿（未确认）','confirmed':'已确认（未标记发放）','paid':'已标记发放'}[batch['status']]
             details['确认时间'] = str(batch['confirmed_at'] or '')
             details['发放标记时间'] = str(batch['paid_at'] or '')
-            display = details[['姓名','工资扣款','绩效扣款','全勤扣款','迟到扣款','加班费','合计']].rename(columns={'合计':'实发金额'})
-            st.dataframe(display, hide_index=True, width='stretch',
-                column_config={c:st.column_config.NumberColumn(c,format='%.2f') for c in display.columns if c!='姓名'})
-            with st.expander('查看一位员工的工资明细'):
-                selected = st.selectbox('查看员工', list(details.index),
-                    format_func=lambda i:f"{details.at[i,'姓名']} · {details.at[i,'员工编号']}")
-                record = details.loc[selected]
-                st.dataframe(pd.DataFrame([{'项目':field,'金额（元）':float(record[field])} for field in
-                    ['工资','绩效','全勤','通勤补贴','加班费','工资扣款','绩效扣款','全勤扣款','迟到扣款','合计']]),
-                    hide_index=True, width='stretch', column_config={'金额（元）':st.column_config.NumberColumn(format='%.2f')})
-                st.write('表现 / 失误备注：',record['工作失误项目'] or '无')
-            st.download_button('下载本月工资明细（Excel）', export_payroll_to_excel(details),
+            def edit_employee(code):
+                # Resolve by stable code, never by a card's display order.
+                selected = buffer['frame'].index[buffer['frame']['员工编号'] == code][0]
+                st.session_state[f"month_employee_{batch['id']}_{generation}"] = selected
+                st.session_state['monthly_input_mode'] = '按员工填写'
+                set_inline_edit(batch['id'], True)
+                st.rerun()
+
+            render_cards(details.to_dict('records'), key=f"saved_{batch['id']}",
+                         on_edit=edit_employee, edit_disabled=locked or outdated)
+            st.download_button('下载本月工资明细（Excel）',
+                download_data(details, (common.DB_SCHEMA, batch['id'], batch['lifecycle_version'], tuple(r['id'] for r in results))),
                 f'{month:%Y-%m}_{batch["status"]}_工资核算明细.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', on_click='ignore')
             st.page_link('views/history_page.py',label='查看历次计算记录',icon=':material/history:')
             st.divider()

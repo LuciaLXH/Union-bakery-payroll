@@ -126,6 +126,7 @@ class AIWorkspace(PayrollWorkspace):
                 if entry['employee_code_snapshot'] in affected:
                     before, after = before_pay.iloc[i], after_pay.iloc[i]
                     impacts.append({'员工': after['姓名'], '门店': after['分店'],
+                        '员工编号': after['员工编号'], '明细': after.to_dict(),
                         '原实发试算': before['合计'], '本次确认后预计实发': after['合计'],
                         '实发变化': after['合计'] - before['合计'],
                         '缺勤及旷工扣款': sum(after[c] for c in ('工资扣款','绩效扣款','全勤扣款')),

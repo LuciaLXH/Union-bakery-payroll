@@ -14,6 +14,21 @@ class AICloudTests(DatabaseFixture):
         self.connection.execute((ROOT/'database/004_ai_entry.sql').read_text().replace('public.', self.schema+'.'))
         self.repo = AIWorkspace(self.connection, schema=self.schema)
 
+    def test_review_explains_allowance_without_changing_pay_rules(self):
+        from decimal import Decimal
+        self.change('salary_snapshot=2600,performance_snapshot=0,attendance_bonus_snapshot=200,'
+                    'commute_allowance_snapshot=300,ordinary_absence_days=0,late_minutes=0,overtime_hours=0')
+        rows = [dict(record(2, kind='普通缺勤'), 单位='天'),
+                dict(record(3.5, kind='加班', source='测试加班3.5小时'), 单位='小时')]
+        impact = self.repo.prepare('2026-10', rows)['impacts'][0]
+        self.assertEqual(impact['原实发试算'], Decimal('3100.00'))
+        self.assertEqual(impact['本次确认后预计实发'], Decimal('2963.90'))
+        self.assertEqual(impact['明细']['通勤补贴'], Decimal('300.00'))
+        self.assertEqual(impact['明细']['工资扣款'], Decimal('173.33'))
+        self.assertEqual(impact['明细']['全勤扣款'], Decimal('13.33'))
+        self.assertEqual(impact['明细']['加班费'], Decimal('50.56'))
+        self.assertEqual(self.repo.entries(self.repo.months()[0]['id'])[0]['ordinary_absence_days'], 0)
+
     def test_add_events_preserve_dates_and_duplicate_blocked(self):
         rows = [record(), record(5, source='10月15日迟到5分钟')]
         p = self.repo.prepare('2026-10', rows)
@@ -158,6 +173,14 @@ from streamlit.testing.v1 import AppTest
 from ai_entry.service import Settings
 
 
+def mock_impact(code, name, store, delta):
+    record = dict.fromkeys(['工资','绩效','全勤','通勤补贴','工资扣款','绩效扣款','全勤扣款',
+                            '迟到扣款','加班费','普通缺勤天数','旷工天数','迟到','有效加班时长'], 0)
+    record.update({'员工编号':code, '姓名':name, '分店':store, '工资':5400, '合计':5400+delta})
+    return {'员工':name, '员工编号':code, '门店':store, '明细':record,
+            '实发变化':delta, '原实发试算':5400, '本次确认后预计实发':5400+delta}
+
+
 class AIPageTests(unittest.TestCase):
     def test_review_preview_write_and_stale_input(self):
         employee=dict(id=1,employee_code='TEST-001',name='虚构员工',store_id=1,store_name='隔离测试门店')
@@ -168,7 +191,7 @@ class AIPageTests(unittest.TestCase):
              patch('ai_entry.service.Settings.from_env',return_value=Settings(key='test',provider='qwen')), \
              patch('ui.ai_entry.extract',return_value=[item]):
             repo.return_value.catalog.return_value=[employee]
-            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[],impacts=[{'员工':'虚构员工','实发变化':-10}],scope=[{'门店':'隔离测试门店','store_id':1,'month_id':1,'计算人数':1,'预计全店实发':5390}])
+            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[],impacts=[mock_impact('TEST-001','虚构员工','隔离测试门店',-10)],scope=[{'门店':'隔离测试门店','store_id':1,'month_id':1,'计算人数':1,'预计全店实发':5390}])
             repo.return_value.apply.return_value=1
             budget.return_value.spent.return_value=0
             at=AppTest.from_file(str(ROOT/'app.py')).run()
@@ -249,7 +272,7 @@ class NaturalIdentityTests(unittest.TestCase):
              patch('ai_entry.service.Settings.from_env',return_value=Settings(key='test',provider='qwen')), \
              patch('ui.ai_entry.extract',return_value=[item]):
             repo.return_value.catalog.return_value=[employee, dict(employee, employee_code='D2', name='杨锡宁', store_name='二店')]
-            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[],impacts=[{'员工':'示例小面包','实发变化':-540}],scope=[{'门店':'一店','store_id':1,'month_id':1,'计算人数':1,'预计全店实发':4860}])
+            repo.return_value.prepare.return_value=dict(token='preview-token',changes=[],impacts=[mock_impact('D1','示例小面包','一店',-540)],scope=[{'门店':'一店','store_id':1,'month_id':1,'计算人数':1,'预计全店实发':4860}])
             budget.return_value.spent.return_value=0
             at=AppTest.from_file(str(ROOT/'app.py')).run()
             at.text_area[0].set_value(item['source'])

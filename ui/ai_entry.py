@@ -1,6 +1,7 @@
 """Password-protected AI entry, using the same employee and payroll database."""
 import os
 from copy import deepcopy
+from decimal import Decimal
 
 import pandas as pd
 import psycopg
@@ -10,6 +11,8 @@ from ai_entry.cloud import AIWorkspace, CloudBudget
 from ai_entry.review import COLUMNS, KINDS, MODES, review_rows
 from ai_entry.service import EntryError, Settings, extract
 from ui import common
+from ui.read_cache import read, clear_reads
+from ui.pay_review import render_cards
 
 
 def call(method, *args):
@@ -73,6 +76,7 @@ def write_review(month, rows, preview, calculate=True):
         if any(not b['frame'].equals(b['base']) for b in st.session_state.get('month_buffers', {}).values()):
             raise ValueError('还有未保存的手动修改，请先保存或放弃修改。')
         count = call('apply', month, rows, preview['token'], calculate)
+        clear_reads()
         st.session_state.ai_receipt = dict(token=preview['token'], count=count,
             calculated=calculate, scope=preview.get('scope', []))
         st.session_state.ai_draft['rows'] = deepcopy(rows)
@@ -102,10 +106,10 @@ def render(month):
 def render_editor(month):
     """Render inline without stopping the enclosing monthly payroll page."""
     try:
-        catalog = call('catalog')
+        catalog = read('ai_catalog', lambda: call('catalog'), schema=common.DB_SCHEMA)
         settings = Settings.from_env()
         budget = CloudBudget(schema=common.DB_SCHEMA)
-        spent = budget.spent()
+        spent = read(('ai_budget', budget.month()), budget.spent, schema=common.DB_SCHEMA)
     except (ValueError, psycopg.Error, KeyError) as exc:
         common.show_error(exc)
         return
@@ -138,7 +142,10 @@ def render_editor(month):
         st.session_state['ai_generation'] = st.session_state.get('ai_generation', 0) + 1
         try:
             with st.spinner('正在整理记录…'):
-                rows = review_rows(extract(text, '按员工档案自动匹配', month, settings, budget), people, stores)
+                try:
+                    rows = review_rows(extract(text, '按员工档案自动匹配', month, settings, budget), people, stores)
+                finally:
+                    clear_reads()
             st.session_state.ai_draft = dict(context=context, rows=rows)
         except (EntryError, psycopg.Error) as exc:
             common.show_error(exc)
@@ -157,7 +164,7 @@ def render_editor(month):
     st.subheader('核对记录与工资变化')
     if any(row['事项'] == '备注' for row in draft['rows']):
         st.info('报损目前仅记录、不扣款。标为“备注”的事项不会改变工资；请假、迟到等考勤确认后会参与计算。')
-    st.caption('员工、事项或数量不对时可直接修改。“新增”加到已有记录，“累计”替换本月总数。员工不明确时，在“员工”列按姓名选择。')
+    summary_slot = st.container()
     frame = pd.DataFrame(draft['rows'], columns=COLUMNS)
     employee_labels = {c: f'{n} · {stores[c]} · {c}' for c,n in people.items()}
     label_codes = {label:c for c,label in employee_labels.items()}
@@ -168,15 +175,17 @@ def render_editor(month):
             st.info(f"第 {i} 条（{row['原文姓名']}）：{row['待核对问题']}")
     frame['数量'] = pd.to_numeric(frame['数量'], errors='coerce').astype(float)
     editor_key = f"ai_editor_{st.session_state.ai_generation}"
-    rows = st.data_editor(frame, key=editor_key, num_rows='dynamic',
-        hide_index=True, width='stretch', disabled=True if applied else ['所属门店', '原文姓名', '待核对问题'], column_config={
-            '员工': st.column_config.SelectboxColumn(options=list(employee_labels.values()), required=True, width='large'),
-            '事项': st.column_config.SelectboxColumn(options=KINDS, required=True),
-            '数量': st.column_config.NumberColumn(min_value=0, max_value=1000000),
-            '单位': st.column_config.SelectboxColumn(options=['分钟','天','小时','元','']),
-            '处理方式': st.column_config.SelectboxColumn(options=MODES, required=True, default='新增'),
-            '原文 / 备注': st.column_config.TextColumn(width='large'),
-        }).to_dict('records')
+    with st.expander('修改本批记录', expanded=bool(any(r.get('待核对问题') for r in draft['rows']))):
+        st.caption('可修改员工、事项和数量。“新增”追加记录，“累计”替换本月总数。')
+        rows = st.data_editor(frame, key=editor_key, num_rows='dynamic',
+            hide_index=True, width='stretch', disabled=True if applied else ['所属门店', '原文姓名', '待核对问题'], column_config={
+                '员工': st.column_config.SelectboxColumn(options=list(employee_labels.values()), required=True, width='large'),
+                '事项': st.column_config.SelectboxColumn(options=KINDS, required=True),
+                '数量': st.column_config.NumberColumn(min_value=0, max_value=1000000),
+                '单位': st.column_config.SelectboxColumn(options=['分钟','天','小时','元','']),
+                '处理方式': st.column_config.SelectboxColumn(options=MODES, required=True, default='新增'),
+                '原文 / 备注': st.column_config.TextColumn(width='large'),
+            }).to_dict('records')
     for row in rows:
         row['员工编号'] = label_codes.get(row.pop('员工', None), '')
         row['所属门店'] = stores.get(row['员工编号'], '')
@@ -187,7 +196,7 @@ def render_editor(month):
     if not rows:
         st.info('没有可保存的事项，请补充原文后重新整理。')
         return
-    st.button('更新核对结果', disabled=applied, help='已在其他页面修改档案或建立本月工资时，点击重新读取。')
+    st.button('更新核对结果', disabled=applied, on_click=clear_reads, help='已在其他页面修改档案或建立本月工资时，点击重新读取。')
     if applied:
         preview = st.session_state.get('ai_preview')
         if not preview:
@@ -205,24 +214,20 @@ def render_editor(month):
         except (ValueError, psycopg.Error) as exc:
             common.show_error(exc)
             return
-    # Describe each recognized item in business language before showing exact totals.
-    rules = {'普通缺勤':'按缺勤天数扣除工资、绩效和全勤', '旷工':'每旷工1天扣3天工资，绩效和全勤各扣1天',
-             '迟到':'每分钟扣1元', '加班':'按有效加班小时计算加班费',
-             '通勤补贴':'按确认金额计入通勤补贴', '备注':'仅保留文字，本项不扣款'}
-    explanations = [{'员工':people.get(r['员工编号'], ''), '事项':r['事项'],
-        '本次记录':r['原文 / 备注'], '工资影响':rules.get(r['事项'], '需要核对')} for r in rows]
-    st.dataframe(pd.DataFrame(explanations), hide_index=True, width='stretch')
-    st.subheader('确认后预计工资')
-    st.caption('原实发试算按当前已保存的考勤计算；变化金额比较本次确认前后，不是与上月工资比较。以下扣款列为确认后的月度合计。')
-    if applied:
-        st.caption('这里保留本批操作核对时的金额；最新工资以下方“本月计算结果”为准。')
-    impact_frame = pd.DataFrame(preview['impacts'])
-    st.dataframe(impact_frame, hide_index=True, width='stretch', column_config={
-        c:st.column_config.NumberColumn(format='%.2f') for c in impact_frame.columns if c not in ('员工','门店')})
-    scope = pd.DataFrame(preview['scope'])
-    st.write(f'本次确认月份：{month}；计算范围为以下门店的全部当月员工。')
-    st.dataframe(scope[['门店','计算人数','预计全店实发']], hide_index=True, width='stretch',
-        column_config={'预计全店实发':st.column_config.NumberColumn(format='%.2f')})
+    with summary_slot:
+        st.subheader('确认后预计工资')
+        st.caption('本批已保存；以下保留确认时的预览，最新工资以下方“本月计算结果”为准。' if applied else
+                   '待确认 · 本批记录尚未保存。核对后点击“确认以上记录并计算工资”。')
+        sources = {}
+        for row in rows:
+            item = ('备注：' + row['原文 / 备注'] if row['事项'] == '备注' else
+                    f"{row['事项']} {Decimal(str(row['数量'])).normalize():f} {row['单位']}（{row['处理方式']}）")
+            sources.setdefault(row['员工编号'], []).append(item)
+        impacts = {item['员工编号']: item for item in preview['impacts']}
+        render_cards([item['明细'] for item in preview['impacts']],
+                     key=f"ai_{month}_{st.session_state.ai_generation}", impacts=impacts, sources=sources)
+        for item in preview['scope']:
+            st.caption(f"{month} · {item['门店']} · 确认时计算本店 {item['计算人数']} 人 · 预计全店实发 {common.money(item['预计全店实发'])}")
     dirty = any(not b['frame'].equals(b['base']) for b in st.session_state.get('month_buffers', {}).values())
     if dirty:
         st.warning('还有未保存的手动修改，请先切换到手动填写并保存，或放弃手动修改，再确认本批记录。')
