@@ -20,7 +20,7 @@ class PayrollCalculationTests(unittest.TestCase):
             ({"旷工天数": 1}, [450, 20, 10, 0, 0, 4920]),
             ({"迟到": 7}, [0, 0, 0, 7, 0, 5393]),
             ({"有效加班时长": 2}, [0, 0, 0, 0, 50, 5450]),
-            ({"通勤补贴": 200}, [0, 0, 0, 0, 0, 5600]),
+            ({"通勤补贴": 200}, [0, 0, 0, 0, 0, 5700]),
             ({"职级": "零基础学徒", "工作失误项目": "练习中失误"}, [0, 0, 0, 0, 0, 5400]),
             ({"普通缺勤天数": 1, "旷工天数": 1}, [600, 40, 20, 0, 0, 4740]),
         ]
@@ -33,7 +33,7 @@ class PayrollCalculationTests(unittest.TestCase):
     def test_combined_inputs(self):
         result = calculate_payroll(employee(普通缺勤天数=1, 旷工天数=1, 迟到=7,
                                             有效加班时长=2, 通勤补贴=200)).iloc[0]
-        self.assertEqual(result["合计"], 4983)
+        self.assertEqual(result["合计"], 5063)
         self.assertEqual(result["应发合计"] - result["扣款合计"], result["合计"])
 
     def test_legacy_fields_cannot_change_pay(self):

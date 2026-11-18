@@ -57,7 +57,8 @@ with st.container(border=True):
             hide_index=True, width='stretch')
     with b:
         st.dataframe(pd.DataFrame([{'核算项目':key,'金额':money(details[key])} for key in
-            ['工资扣款','绩效扣款','全勤扣款','迟到扣款','加班费','应发合计','扣款合计','合计']]),
+            ['标准通勤补贴','通勤减发','实发通勤补贴','工资扣款','绩效扣款','全勤扣款','迟到扣款','加班费','应发合计','扣款合计','合计']]),
             hide_index=True, width='stretch')
     st.write('表现 / 失误备注：', details['工作失误项目'] or '无')
     st.caption(f"规则版本：{record['rule_version']} · 结果编号：{record['id']}")
+    st.caption('通勤减发已从实发通勤补贴中减去，不再计入扣款合计。历史记录按保存时的规则展示。')

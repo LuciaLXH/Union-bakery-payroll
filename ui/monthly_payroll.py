@@ -106,6 +106,8 @@ def render_payroll(month, stores, entry_mode):
     locked = batch['status'] != 'draft'
     editing = entry_mode == '手动填写' or (not locked and st.session_state.get(f'month_inline_edit_{batch["id"]}', False))
     results = view['results']
+    if batch['status'] == 'draft' and len(results) < len(entries):
+        st.caption('通勤补贴新规则：原本为 0 的仍为 0，享有补贴的按 30 天 × 10 元，请假或缺勤每天减发 10 元。点击“保存并计算本月工资”后更新结果；已锁定工资保留原结果。')
     complete = (bool(entries) and len(results) == len(entries) and not dirty and not outdated
                 and all(row['net_pay'] >= 0 for row in results))
     total = sum((row['net_pay'] for row in results), Decimal(0)) if complete else None
@@ -230,7 +232,7 @@ def render_payroll(month, stores, entry_mode):
                             value=None if pd.isna(row[column]) else float(row[column]), step=100.0, format='%.2f', key=key,
                             disabled=locked or outdated, on_change=edit_field,
                             args=(key,batch['id'],row_index,column))
-                    st.caption('工资已包含社保补贴；通勤补贴填写本月实际应发金额。')
+                    st.caption('工资已包含社保补贴。通勤补贴：不享有填 0，享有填 300（已有正数也按 300 元标准）；请假、普通缺勤或旷工每天自动减发 10 元，不要先手动扣减。')
             else:
                 st.info('双击单元格填写，按 Enter 完成。右侧金额和备注可横向滚动查看；填写后仍需点击下方按钮保存。')
                 order = ['姓名','员工编号','普通缺勤天数','旷工天数','迟到','有效加班时长','工资','绩效','全勤','通勤补贴','工作失误项目']

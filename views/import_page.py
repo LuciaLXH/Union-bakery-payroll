@@ -13,7 +13,7 @@ with a:
     st.download_button("下载空白工资模板", create_attendance_template(), "工资录入空白模板.xlsx")
 with b:
     st.download_button("下载虚构填写示例", create_attendance_template(sample=True), "虚构工资示例.xlsx")
-st.caption("姓名、工资、绩效、全勤必填，没有该项请填0。其余考勤数值和通勤补贴留空按0。迟到单位为分钟，加班单位为小时。")
+st.caption("姓名、工资、绩效、全勤必填，没有该项请填0。其余考勤数值和通勤补贴留空按0。通勤补贴享有填300，不享有填0；缺勤每天自动减发10元。迟到单位为分钟，加班单位为小时。")
 
 if st.button("载入8名虚构员工（替换当前草稿）"):
     load_inputs(st.session_state, example_inputs(), "虚构样例")

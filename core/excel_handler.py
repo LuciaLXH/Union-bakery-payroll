@@ -9,11 +9,11 @@ def example_inputs():
     """八个虚构算例，不读取或混入真实员工资料。"""
     changes = [
         {}, {"普通缺勤天数": 1}, {"旷工天数": 1}, {"迟到": 7},
-        {"有效加班时长": 2}, {"通勤补贴": 200},
+        {"有效加班时长": 2}, {"通勤补贴": 300},
         {"职级": "零基础学徒", "工作失误项目": "虚构示例：整形需加强练习，仅作备注"},
         {"普通缺勤天数": 1, "旷工天数": 1},
     ]
-    expected = [5400, 5220, 4920, 5393, 5450, 5600, 5400, 4740]
+    expected = [5400, 5220, 4920, 5393, 5450, 5700, 5400, 4740]
     records = []
     for i, (change, total) in enumerate(zip(changes, expected), 1):
         record = {"员工编号": f"DEMO-{i:03d}", "姓名": f"虚构员工{i}", "分店": "示例门店",
@@ -49,7 +49,7 @@ def _write_sheet(writer, df, sheet_name):
     header = book.add_format({"bold": True, "font_color": "white", "bg_color": "#1F4E78", "text_wrap": True})
     money = book.add_format({"num_format": "0.00"})
     text = book.add_format({"num_format": "@"})
-    money_cols = set(config.MONEY_COLUMNS) | {"加班费", "合计", "应发合计", "扣款合计", "工资扣款", "绩效扣款", "全勤扣款", "迟到扣款", "原表合计", "原表加班费", "合计差额", "加班费差额"}
+    money_cols = set(config.MONEY_COLUMNS + config.COMMUTE_OUTPUT_COLUMNS) | {"加班费", "合计", "应发合计", "扣款合计", "工资扣款", "绩效扣款", "全勤扣款", "迟到扣款", "原表合计", "原表加班费", "合计差额", "加班费差额"}
     for col, name in enumerate(df.columns):
         sheet.write(0, col, name, header)
         width = 42 if name in ("工作失误项目", "核算提示") else 18
@@ -81,7 +81,7 @@ def create_attendance_template(sample=False):
             "工资": "必填，基本工资加社保补贴，不要先扣考勤。金额最多两位小数。",
             "绩效": "必填，扣缺勤前的月绩效；没有请填0。",
             "全勤": "必填，扣缺勤前的月全勤；没有请填0。",
-            "通勤补贴": "本月实际应发金额，不再自动按缺勤折算。空白按0。",
+            "通勤补贴": "不享有填0，享有填300；已有正数按300元标准。普通缺勤和旷工每天减发10元，不要提前扣减。空白按0。",
             "普通缺勤天数": "整天数；工资、绩效、全勤每天各扣1/30。空白按0。",
             "旷工天数": "整天数；每天扣3天工资，绩效及全勤扣当天。不与普通缺勤重复。空白按0。",
             "迟到": "单位为分钟，整数；每分钟扣1元。空白按0。",
@@ -116,8 +116,9 @@ def export_payroll_to_excel(payroll_df):
         _write_sheet(writer, payroll_df, "核算明细")
         _write_sheet(writer, pd.DataFrame([
             {"项目": "规则版本", "说明": '、'.join(map(str, payroll_df['规则版本'].unique()))
-             if '规则版本' in payroll_df else config.RULE_VERSION},
+             if '规则版本' in payroll_df else payroll_df.attrs.get('rule_version', config.RULE_VERSION)},
             {"项目": "金额口径", "说明": "工资已含社保补贴；绩效和全勤为扣缺勤前金额；合计为实发。"},
+            {"项目": "通勤补贴", "说明": "通勤补贴列保留原始设置；标准、减发、实发三列为当时结果。新规则：0不享有，正数按30天×10元，普通缺勤和旷工每天减发10元。历史版本保留原固定金额。应发合计已使用实发通勤补贴，扣款合计不再重复包含通勤减发。"},
             {"项目": "状态", "说明": ('、'.join(payroll_df['确认状态'].unique())
              if '确认状态' in payroll_df else '核算草稿（未确认）') + '。本系统不执行转账，发放状态仅为人工标记。'},
         ]), "核算说明").set_column(1, 1, 90)

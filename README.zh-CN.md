@@ -1,5 +1,7 @@
 # Union Bakery 工资小管家
 
+最新工资规则：[2026-11-18 通勤补贴按缺勤每天减发 10 元](docs/2026-11-18-commute-allowance.md)。原本为 0 的仍为 0；已锁定历史工资不自动重算。
+
 [English portfolio overview](README.md) · [本轮完整交接记录](docs/2026-10-25-ai-entry-handover.md) · [后续功能路线图](docs/product-roadmap.md)
 
 老板单人正式版准备：已增加专用登录、数据库环境校验、工资确认锁定/发放标记/留原因更正、操作记录和备份恢复工具。见[正式版操作与维护说明](docs/production-owner-guide.md)和[本轮发布验证记录](docs/2026-10-25-production-preparation.md)。正式账号暂由开发者持有；首月仍需与原 Excel 对账，不能把技术验证当作业务验收。

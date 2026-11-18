@@ -1,8 +1,10 @@
 """本轮已确认的核算常量；员工金额由输入提供。"""
 from decimal import Decimal
 
-RULE_VERSION = "2026-10-02-v1"
+RULE_VERSION = "2026-11-18-v2"
 MONTH_DAYS = Decimal("30")
+COMMUTE_DAILY_RATE = Decimal("10")
+COMMUTE_OUTPUT_COLUMNS = ("标准通勤补贴", "通勤减发", "实发通勤补贴")
 DAILY_HOURS = Decimal("9")
 OVERTIME_MULTIPLIER = Decimal("1.5")
 ABSENCE_SALARY_MULTIPLIER = Decimal("3")

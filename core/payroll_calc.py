@@ -143,7 +143,12 @@ def calculate_payroll(employees_df: pd.DataFrame, *, decimal_output=False) -> pd
                 "迟到扣款": _money(t * config.LATE_PER_MINUTE),
                 "加班费": _money(w * config.OVERTIME_MULTIPLIER * h / (config.MONTH_DAYS * config.DAILY_HOURS)),
             }
-            amounts["应发合计"] = _money(w + p + a + c + amounts["加班费"])
+            # Keep the original input as entitlement, including when all 30 days are absent.
+            # The reduced allowance is included in gross, never deducted a second time.
+            amounts["标准通勤补贴"] = _money(config.MONTH_DAYS * config.COMMUTE_DAILY_RATE if c > 0 else Decimal(0))
+            amounts["通勤减发"] = _money((n + m) * config.COMMUTE_DAILY_RATE if c > 0 else Decimal(0))
+            amounts["实发通勤补贴"] = amounts["标准通勤补贴"] - amounts["通勤减发"]
+            amounts["应发合计"] = _money(w + p + a + amounts["实发通勤补贴"] + amounts["加班费"])
             amounts["扣款合计"] = sum(amounts[col] for col in ("工资扣款", "绩效扣款", "全勤扣款", "迟到扣款"))
             amounts["合计"] = amounts["应发合计"] - amounts["扣款合计"]
             record = row.to_dict()

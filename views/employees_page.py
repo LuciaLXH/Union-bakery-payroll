@@ -60,6 +60,7 @@ with st.container(border=True, key='people_form'):
                 value=float(original.get(field,0)), step=100.0, format='%.2f')
         active = st.checkbox('在职，参与新月份工资', value=original.get('is_active',True))
         st.caption('没有绩效或补贴请填 0。修改档案只影响以后新建的明细；本月调薪请到月度工资中调整。')
+        st.caption('通勤补贴：不享有填 0，享有填 300；已有正数也按每月 300 元标准，每请假、缺勤一天减发 10 元。')
         if st.form_submit_button('保存员工档案', type='primary'):
             try:
                 db('save_employee', store_id, dict(employee_code=code,name=name,job_title=title,

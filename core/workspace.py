@@ -289,6 +289,13 @@ def result_frame(results):
         row['分店'] = snapshot.get('store_name', '')
         row['工资月份'] = snapshot.get('payroll_month', '')
         row.update({column: float(result[field]) for field, column in RESULT_FIELDS.items()})
+        # Legacy snapshots retain the original fixed allowance; never recalculate history.
+        commute = snapshot.get('commute_calculation')
+        if commute is not None:
+            row.update({column: float(commute[column]) for column in config.COMMUTE_OUTPUT_COLUMNS})
+        else:
+            row.update({'标准通勤补贴': row['通勤补贴'], '通勤减发': 0.0,
+                        '实发通勤补贴': row['通勤补贴']})
         row['核算提示'] = '实发金额为负' if result['net_pay'] < 0 else ''
         row['输入版本'] = result['input_version']
         row['规则版本'] = result['rule_version']

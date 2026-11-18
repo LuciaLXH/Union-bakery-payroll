@@ -108,6 +108,8 @@ class PayrollStorage:
                         raise ValueError(f"员工 {entry['employee_code_snapshot']}："
                                          f"{calculated['核算提示']}；本次保存全部回滚。")
                     snapshot = dict(entry)
+                    snapshot['commute_calculation'] = {
+                        column: calculated[column] for column in config.COMMUTE_OUTPUT_COLUMNS}
                     snapshot.update(payroll_month=month['payroll_month'],
                                     store_id=month['store_id'], store_name=month['store_name'])
                     values = [entry['id'], entry['input_version'], rule_version,

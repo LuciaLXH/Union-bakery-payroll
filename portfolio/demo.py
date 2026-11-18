@@ -196,6 +196,8 @@ class DemoWorkspace:
                    and h['rule_version'] == config.RULE_VERSION for h in self.data['history']):
                 continue
             snapshot = dict(deepcopy(entry), store_name=store['name'], payroll_month=month['payroll_month'].isoformat())
+            snapshot['commute_calculation'] = {
+                column: result[column] for column in config.COMMUTE_OUTPUT_COLUMNS}
             self._insert('history', payroll_entry_id=entry['id'], input_version=entry['input_version'],
                 rule_version=config.RULE_VERSION, input_snapshot=snapshot, calculated_at=datetime.now(timezone.utc),
                 **{field: result[column] for field, column in RESULT_FIELDS.items()})

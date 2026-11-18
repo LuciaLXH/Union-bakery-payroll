@@ -37,7 +37,7 @@ class ExcelTests(unittest.TestCase):
     def test_example_template_roundtrip(self):
         inputs = read_attendance_excel(BytesIO(create_attendance_template(sample=True)))
         result = calculate_payroll(inputs)
-        self.assertEqual(result["合计"].tolist(), [5400, 5220, 4920, 5393, 5450, 5600, 5400, 4740])
+        self.assertEqual(result["合计"].tolist(), [5400, 5220, 4920, 5393, 5450, 5700, 5400, 4740])
         self.assertTrue(result["合计差额"].eq(0).all())
 
     def test_legacy_file_cannot_silently_infer_salary(self):

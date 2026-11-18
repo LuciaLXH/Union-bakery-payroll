@@ -17,16 +17,25 @@ def attendance_summary(record):
 
 
 def render_breakdown(record):
-    fixed = ['工资', '绩效', '全勤', '通勤补贴']
+    record = dict(record)
+    record.setdefault('实发通勤补贴', record['通勤补贴'])
+    fixed = ['工资', '绩效', '全勤', '实发通勤补贴']
     deductions = ['工资扣款', '绩效扣款', '全勤扣款', '迟到扣款']
     rows = [{'项目': '工资（含社保补贴）' if k == '工资' else k, '金额': money(record[k])} for k in fixed]
     base = sum((Decimal(str(record[k])) for k in fixed), Decimal(0))
-    rows.append({'项目': '考勤调整前合计', '金额': money(base)})
+    rows.append({'项目': '工资及实发补贴小计', '金额': money(base)})
     rows.extend({'项目': k, '金额': '−' + money(record[k])} for k in deductions)
     rows.extend([{'项目': '加班费', '金额': '+' + money(record['加班费'])},
                  {'项目': '预计实发', '金额': money(record['合计'])}])
     st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch', height='auto')
-    st.caption('工资已含社保补贴；通勤补贴按本月填写金额发放，不随缺勤折算。')
+    if record.get('规则版本') == '2026-10-02-v1' or '标准通勤补贴' not in record:
+        st.caption('历史规则：通勤补贴按当时填写金额发放，不随缺勤折算。')
+    elif not record['标准通勤补贴']:
+        st.caption('通勤补贴：原本不享有补贴，本月仍为 0 元。')
+    else:
+        days = Decimal(str(record.get('普通缺勤天数', 0))) + Decimal(str(record.get('旷工天数', 0)))
+        st.caption(f"通勤补贴：标准 {money(record['标准通勤补贴'])} − 请假 / 缺勤 {days.normalize():f} 天 × 10 元"
+                   f"（减发 {money(record['通勤减发'])}）＝实发 {money(record['实发通勤补贴'])}。已计入上方小计，不重复扣款。")
     if record.get('工作失误项目'):
         st.text('备注：' + str(record['工作失误项目']))
 
@@ -63,7 +72,7 @@ def render_cards(records, *, key, impacts=None, sources=None, on_edit=None, edit
     full = st.expander('查看完整表格', key=f'{key}_table', on_change='rerun')
     if full.open:
         with full:
-            columns = ['姓名', '分店', '工资', '绩效', '全勤', '通勤补贴',
+            columns = ['姓名', '分店', '工资', '绩效', '全勤', '标准通勤补贴', '通勤减发', '实发通勤补贴',
                        '工资扣款', '绩效扣款', '全勤扣款', '迟到扣款', '加班费', '合计']
             frame = pd.DataFrame(records)[columns].rename(columns={'合计': '预计实发'})
             st.dataframe(frame, hide_index=True, width='stretch')

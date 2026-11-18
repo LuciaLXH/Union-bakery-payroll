@@ -18,7 +18,7 @@ class PageTests(unittest.TestCase):
     def test_sample_calculation_export_and_page_return(self):
         self.at.button[0].click().run()
         self.assertEqual(self.at.session_state.payroll_df["合计"].tolist(),
-                         [5400, 5220, 4920, 5393, 5450, 5600, 5400, 4740])
+                         [5400, 5220, 4920, 5393, 5450, 5700, 5400, 4740])
         self.at.switch_page("views/export_page.py").run()
         self.assertEqual(len(self.at.exception), 0)
         self.assertEqual(len(self.at.get("download_button")), 1)
@@ -26,7 +26,7 @@ class PageTests(unittest.TestCase):
         self.at.switch_page("views/import_page.py").run()
         self.at.switch_page("views/editor_page.py").run()
         self.assertEqual(len(self.at.exception), 0)
-        self.assertEqual(self.at.session_state.payroll_df["合计"].sum(), 42123)
+        self.assertEqual(self.at.session_state.payroll_df["合计"].sum(), 42223)
 
     def test_changed_inputs_cannot_export_old_result(self):
         self.at.button[0].click().run()

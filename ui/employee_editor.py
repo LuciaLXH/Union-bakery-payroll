@@ -38,6 +38,7 @@ def render_employee_editor(store_id, employees):
         st.subheader('批量新增或修改员工')
         st.caption('直接点击单元格修改，点击表格底部“＋”添加员工。金额单位为元，约定工资包含社保补贴；没有的项目请填 0。表格可横向滚动。')
         st.caption('所有行归属上方所选门店。离职请取消勾选“在职”，不要删除已有员工行。修改档案不改变已经建立的月份。')
+        st.caption('通勤补贴：不享有填 0，享有填 300；已有正数也按 300 元标准，月度核算按缺勤每天减发 10 元。')
         dirty = not buffer['frame'].equals(buffer['base'])
         if dirty:
             st.warning('有未保存的员工资料，请点击下方“保存全部员工档案”。')

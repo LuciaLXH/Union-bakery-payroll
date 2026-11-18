@@ -106,6 +106,8 @@ def confirm_rows(rows, context, people=None, stores=None):
                 raise EntryError(f'第 {index} 行：数量无效；缺勤按整天、迟到按整数分钟测试。') from None
             if row.get('单位') != units[kind] or mode == '不适用':
                 raise EntryError(f'第 {index} 行：请核对单位及新增/累计方式。')
+            if kind == '通勤补贴' and (mode != '累计' or amount not in (0, 300)):
+                raise EntryError(f'第 {index} 行：通勤补贴不享有填 0，享有填 300，处理方式选“累计”；缺勤每天自动减发 10 元，不填写扣减后的金额。')
             row['数量'] = float(amount)
         row['确认姓名'] = people[row['员工编号']]
         row['所属门店'] = stores[row['员工编号']]

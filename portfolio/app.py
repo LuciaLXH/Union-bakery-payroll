@@ -322,6 +322,7 @@ def employees():
                                               value=float(original.get(field, 0)), step=100.0)
         active = st.checkbox('Active · include in new pay months', value=original.get('is_active', True))
         st.caption('Use 0 when a component does not apply. Regular pay includes the agreed social insurance allowance.')
+        st.caption('Travel allowance: 0 means not entitled; positive values use CNY 300 per month, reduced by CNY 10 per absence day.')
         if st.form_submit_button('Save employee', type='primary'):
             try:
                 repo().save_employee(store['id'], dict(employee_code=code, name=name, job_title=role,
@@ -414,7 +415,8 @@ def about():
                 'Performance / attendance deduction = each component / 30 × total absence days\n'
                 'Late deduction = late minutes × CNY 1\n'
                 'Overtime = salary / 30 / 9 × 1.5 × overtime hours\n'
-                'Net pay = regular components + overtime − deductions', language='text')
+                'Travel allowance = (30 − total absence days) × CNY 10 if entitled, otherwise 0\n'
+                'Net pay = regular components (using payable travel allowance) + overtime − deductions', language='text')
         st.caption('Store-specific requirements, not a general payroll or New Zealand compliance model. Currency: CNY. Translation does not change the rules.')
     st.subheader('Planned next steps')
     st.write('Individual payslips, reviewed email delivery, manager attendance access and a monthly analytics dashboard. '

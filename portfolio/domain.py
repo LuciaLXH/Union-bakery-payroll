@@ -5,6 +5,8 @@ import pandas as pd
 from core.payroll_calc import PayrollValidationError
 
 LABELS = {
+    '标准通勤补贴': 'Standard travel allowance', '通勤减发': 'Travel allowance reduction',
+    '实发通勤补贴': 'Payable travel allowance',
     '员工编号': 'Employee ID', '姓名': 'Name', '分店': 'Store', '岗位': 'Role',
     '职级': 'Grade', '入职时间': 'Start date', '工资': 'Base pay incl. allowance',
     '绩效': 'Performance pay', '全勤': 'Attendance bonus', '通勤补贴': 'Travel allowance',

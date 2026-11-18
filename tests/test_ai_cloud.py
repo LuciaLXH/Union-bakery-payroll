@@ -14,7 +14,7 @@ class AICloudTests(DatabaseFixture):
         self.connection.execute((ROOT/'database/004_ai_entry.sql').read_text().replace('public.', self.schema+'.'))
         self.repo = AIWorkspace(self.connection, schema=self.schema)
 
-    def test_review_explains_allowance_without_changing_pay_rules(self):
+    def test_review_includes_commute_reduction_without_saving(self):
         from decimal import Decimal
         self.change('salary_snapshot=2600,performance_snapshot=0,attendance_bonus_snapshot=200,'
                     'commute_allowance_snapshot=300,ordinary_absence_days=0,late_minutes=0,overtime_hours=0')
@@ -22,8 +22,10 @@ class AICloudTests(DatabaseFixture):
                 dict(record(3.5, kind='加班', source='测试加班3.5小时'), 单位='小时')]
         impact = self.repo.prepare('2026-10', rows)['impacts'][0]
         self.assertEqual(impact['原实发试算'], Decimal('3100.00'))
-        self.assertEqual(impact['本次确认后预计实发'], Decimal('2963.90'))
+        self.assertEqual(impact['本次确认后预计实发'], Decimal('2943.90'))
         self.assertEqual(impact['明细']['通勤补贴'], Decimal('300.00'))
+        self.assertEqual(impact['明细']['通勤减发'], Decimal('20.00'))
+        self.assertEqual(impact['明细']['实发通勤补贴'], Decimal('280.00'))
         self.assertEqual(impact['明细']['工资扣款'], Decimal('173.33'))
         self.assertEqual(impact['明细']['全勤扣款'], Decimal('13.33'))
         self.assertEqual(impact['明细']['加班费'], Decimal('50.56'))
