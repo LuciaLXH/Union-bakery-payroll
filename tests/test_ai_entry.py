@@ -10,9 +10,16 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
-from ai_entry.service import Budget, EntryError, Settings, extract, validate_items
+from ai_entry.service import Budget, EntryError, Settings, extract, validate_items, source_fragments, resolve_sources
 from ai_entry.review import EXAMPLE_ITEMS, SAMPLE, confirm_rows, review_rows
 from ai_entry.monthly import MonthlyStore
+
+
+def provider_items(items):
+    sources = source_fragments(SAMPLE)
+    return [dict({k: v for k, v in item.items() if k != 'source'},
+                 source_id=next(key for key, text in sources.items() if text == item['source']))
+            for item in items]
 
 
 class ExtractionTests(unittest.TestCase):
@@ -30,7 +37,7 @@ class ExtractionTests(unittest.TestCase):
         self.assertNotIn('test-placeholder', payload.decode())
         self.assertTrue(body['response_format']['json_schema']['strict'])
         return {'usage': {'prompt_tokens': 3000, 'completion_tokens': 1000},
-                'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps({'items': EXAMPLE_ITEMS})}}]}
+                'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps({'items': provider_items(EXAMPLE_ITEMS)})}}]}
 
     def run_extract(self, transport=None):
         return extract(SAMPLE, '虚构门店 A', '2026-10', self.settings, self.budget, transport or self.response)
@@ -98,7 +105,7 @@ class ExtractionTests(unittest.TestCase):
             self.assertNotIn('store', body)
             self.assertTrue(body['response_format']['json_schema']['strict'])
             return {'usage': {'prompt_tokens': 3000, 'completion_tokens': 1000},
-                    'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps({'items': EXAMPLE_ITEMS})}}]}
+                    'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps({'items': provider_items(EXAMPLE_ITEMS)})}}]}
         self.assertEqual(extract(SAMPLE, '自动匹配', '2026-10', settings, self.budget, response), EXAMPLE_ITEMS)
         self.assertEqual(self.budget.spent(), 1400)
 
