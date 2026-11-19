@@ -9,6 +9,8 @@ import os
 st.set_page_config(page_title="Union Bakery · 工资工作台", page_icon="🍞", layout="wide")
 st.markdown('<style>' + (Path(__file__).parent / 'ui/style.css').read_text() + '</style>', unsafe_allow_html=True)
 require_test_access()
+if os.environ.get('LOCAL_INSTALL_MODE') == 'trial':
+    st.warning('本机试用版 · 使用独立虚构数据，尚未完成 Windows 实机验收。请勿在此录入正式工资。')
 initialize(st.session_state)
 pages = [
     st.Page('views/monthly_page.py', title='月度工资', icon=':material/payments:', default=True),
