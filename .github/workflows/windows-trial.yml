@@ -26,6 +26,7 @@ jobs:
       - name: Build allowlisted portable trial
         run: python -m scripts.build_windows_bundle
       - name: Test packaged Python, PostgreSQL, login, backup and shutdown
+        timeout-minutes: 5
         shell: pwsh
         run: |
           $bundle = (Resolve-Path '.local/releases/UnionBakery-Windows-x64-Trial-2026.11.19').Path

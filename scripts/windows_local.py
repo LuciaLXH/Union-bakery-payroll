@@ -57,8 +57,10 @@ def clean_environment():
 def exclusive(path):
     path.parent.mkdir(parents=True,exist_ok=True)
     file = path.open('a+b')
-    file.seek(0)
-    if not file.read(1):
+    # Windows byte-range locks also prevent reading the locked byte from another
+    # handle. Inspect length without reading it, then acquire the lock explicitly.
+    file.seek(0,2)
+    if file.tell() == 0:
         file.write(b'0'); file.flush()
     file.seek(0)
     try:
@@ -110,12 +112,13 @@ class Manager:
         return str(self.pg_bin/(name + ('.exe' if os.name == 'nt' else '')))
 
     def pg(self,name,args,*,check=True):
-        result = subprocess.run([self.tool(name),*map(str,args)],env=clean_environment(),
-                                capture_output=True,timeout=90)
+        # A daemon can inherit pipe handles on Windows even after pg_ctl exits.
+        # Use a protected log file so waiting for the command never waits for EOF
+        # from a running database server.
+        with (self.logs/'database-tools.log').open('ab') as log:
+            result = subprocess.run([self.tool(name),*map(str,args)],env=clean_environment(),
+                                    stdout=log,stderr=subprocess.STDOUT,timeout=90)
         if check and result.returncode:
-            # Tool output can include local paths/configuration; keep it in protected storage.
-            with (self.logs/'database-tools.log').open('ab') as log:
-                log.write(result.stdout + result.stderr)
             raise ValueError(f'{name} 未完成。请联系维护者查看本机日志；不会重建或清空已有数据库。')
         return result
 
