@@ -2,11 +2,14 @@ from copy import deepcopy
 from dataclasses import replace
 from decimal import Decimal
 import json
+from io import BytesIO
 import os
+import ssl
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 
 from streamlit.testing.v1 import AppTest
 
@@ -83,6 +86,40 @@ class ExtractionTests(unittest.TestCase):
             extract(SAMPLE, 'A', '2026-10', replace(self.settings, key=''), self.budget)
         with self.assertRaises(EntryError):
             extract('', 'A', '2026-10', self.settings, self.budget)
+        self.assertEqual(self.budget.spent(), 0)
+
+    def test_provider_failures_are_actionable_without_disclosing_secrets_or_retrying(self):
+        private = 'test-placeholder private-url private-body'
+        cases = [(HTTPError('https://private-url', code, private, {'Authorization': private},
+                            BytesIO(private.encode())), expected)
+                 for code, expected in [(400, '请求格式'), (401, '密钥验证'), (403, '拒绝访问'),
+                                        (404, '模型或接口'), (429, '限制'), (503, '暂时异常')]]
+        cases += [(URLError(ssl.SSLError(private)), '证书'),
+                  (URLError(TimeoutError(private)), '超时'),
+                  (URLError(private), '互联网连接'),
+                  (json.JSONDecodeError(private, private, 0), '有效数据')]
+        for exception, expected in cases:
+            with self.subTest(expected=expected):
+                before = self.budget.spent()
+                with patch('ai_entry.service.post_json', side_effect=exception) as transport:
+                    with self.assertRaises(EntryError) as raised:
+                        self.run_extract(transport)
+                message = str(raised.exception)
+                self.assertIn(expected, message)
+                self.assertIn('未自动重试', message)
+                self.assertIn('费用状态未知', message)
+                for secret in private.split(): self.assertNotIn(secret, message)
+                transport.assert_called_once()
+                self.assertGreater(self.budget.spent(), before)
+
+    def test_local_missing_key_instructions_and_bad_copy_do_not_call_provider(self):
+        with patch.dict(os.environ, {'LOCAL_INSTALL_MODE': 'trial'}):
+            with self.assertRaisesRegex(EntryError, '04-设置千问AI'):
+                extract(SAMPLE, 'A', '2026-10', replace(self.settings, key=''), self.budget)
+        for key in ('test key', 'test\nkey', '密钥test'):
+            with self.assertRaisesRegex(EntryError, '重新复制'):
+                extract(SAMPLE, 'A', '2026-10', replace(self.settings, key=key), self.budget,
+                        lambda *args: self.fail('Must not send malformed credentials'))
         self.assertEqual(self.budget.spent(), 0)
 
     def test_switching_model_requires_explicit_prices(self):

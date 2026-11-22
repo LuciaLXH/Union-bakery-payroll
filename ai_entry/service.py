@@ -7,6 +7,8 @@ import os
 import re
 from pathlib import Path
 import sqlite3
+import ssl
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -150,6 +152,33 @@ def post_json(settings, payload):
         return json.loads(response.read(1_000_000))
 
 
+def request_failure_message(error):
+    """Only expose known categories, never provider bodies, URLs, headers or keys."""
+    if isinstance(error, HTTPError):
+        messages = {
+            400: 'AI 服务拒绝了请求格式（HTTP 400），请联系维护者检查模型和请求参数。',
+            401: 'AI 密钥验证未通过（HTTP 401）。请核对密钥是否完整有效，以及密钥和接口是否属于同一地域。',
+            403: 'AI 服务拒绝访问（HTTP 403）。请在服务平台检查模型权限、服务开通情况和账户余额。',
+            404: 'AI 模型或接口不存在（HTTP 404）。请联系维护者核对模型名称、地域和接口地址。',
+            429: 'AI 服务限制了本次请求（HTTP 429）。请检查调用频率和账户额度，勿连续点击。',
+        }
+        if error.code in messages:
+            return messages[error.code]
+        if isinstance(error.code, int) and 500 <= error.code <= 599:
+            return 'AI 服务暂时异常（HTTP 5xx），请稍后再试。'
+        return 'AI 服务返回了异常状态，请联系维护者检查接口配置。'
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, ssl.SSLError):
+        return '无法安全连接 AI 服务（证书或加密连接失败）。请检查电脑日期、代理和网络，不要关闭证书验证。'
+    if isinstance(reason, TimeoutError):
+        return '连接 AI 服务超时。请检查网络，稍后再试。'
+    if isinstance(error, URLError):
+        return '未能连接 AI 服务。请检查互联网连接、代理和防火墙设置。'
+    if isinstance(error, (json.JSONDecodeError, UnicodeDecodeError)):
+        return 'AI 服务未返回有效数据，请联系维护者检查接口或网络代理。'
+    return '模型请求失败，暂时无法确定原因，请联系维护者检查。'
+
+
 def validate_items(data, text):
     if not isinstance(data, dict) or set(data) != {'items'} or not isinstance(data['items'], list):
         raise EntryError('识别结果格式不正确，请手动录入或缩短文字后重试。')
@@ -199,7 +228,11 @@ def resolve_sources(data, sources, text):
 
 def extract(text, store, month, settings, budget, transport=post_json):
     if not settings.key:
+        if os.getenv('LOCAL_INSTALL_MODE') == 'trial':
+            raise EntryError('尚未配置 AI 密钥。请先运行“02-停止工资网站”，再运行“04-设置千问AI”，保存后用“01-启动工资网站”重新打开。也可先手动填写。')
         raise EntryError(f'尚未配置 {settings.key_variable}；可先体验固定示例或手动录入。')
+    if not settings.key.isascii() or any(char.isspace() for char in settings.key):
+        raise EntryError('AI 密钥包含空格、换行或非英文字符，请重新复制完整密钥；不要附带引号或说明文字。')
     if not text.strip() or len(text) > 3000:
         raise EntryError('请输入 1–3000 字的记录。')
     sources = source_fragments(text)
@@ -227,8 +260,9 @@ def extract(text, store, month, settings, budget, transport=post_json):
     request_id = budget.reserve(reservation, settings)
     try:
         response = transport(settings, payload)
-    except Exception:
-        raise EntryError('模型请求失败或超时，未自动重试。费用状态未知，保留本次预算预留；可手动录入。') from None
+    except Exception as error:
+        raise EntryError(request_failure_message(error) +
+                         ' 本次识别未完成，未自动重试。费用状态未知，保留本次预算预留；可手动录入。') from None
     try:
         usage = response['usage']
         inputs, outputs = usage['prompt_tokens'], usage['completion_tokens']

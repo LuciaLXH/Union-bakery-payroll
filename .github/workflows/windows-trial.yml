@@ -29,7 +29,7 @@ jobs:
         timeout-minutes: 5
         shell: pwsh
         run: |
-          $bundle = (Resolve-Path '.local/releases/UnionBakery-Windows-x64-Trial-2026.11.19').Path
+          $bundle = (Resolve-Path '.local/releases/UnionBakery-Windows-x64-Trial-2026.11.22').Path
           $env:WINDOWS_BUNDLE_TEST_ROOT = $bundle
           $env:PG_BIN = Join-Path $bundle 'runtime/postgres/bin'
           & (Join-Path $bundle 'runtime/python/python.exe') -X utf8 (Join-Path $bundle 'preflight.py')

@@ -321,10 +321,12 @@ def main():
     if action=='start': return manager.run()
     if action=='ai':
         with exclusive(home/'application.lock'):
-            print('使用老板自己的千问 API Key；仅在识别时联网并按服务商计费。直接回车可停用。')
+            print('请使用阿里云百炼“华北2（北京）”地域的 API Key；本包固定连接北京接口。')
+            print('其他地域请先联系维护者匹配接口；不要在聊天中发送密钥。')
+            print('仅在识别时联网并按服务商计费。直接回车可停用。')
             manager.settings['ai_key']=getpass.getpass('API Key（输入不显示）：').strip()
             atomic_json(manager.settings_path,manager.settings)
-            print('已保存本机设置，下次启动生效。')
+            print('已保存本机设置，尚未验证密钥能否调用。请重新运行“01-启动工资网站”。')
         return
     with exclusive(home/'application.lock'):
         started=False

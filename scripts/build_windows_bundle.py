@@ -74,7 +74,7 @@ def main():
     wheels=sorted((args.cache/'wheels').glob('*.whl'))
     versions=validate_wheels(wheels)
     args.output.mkdir(parents=True,exist_ok=True)
-    name='UnionBakery-Windows-x64-Trial-2026.11.19'
+    name='UnionBakery-Windows-x64-Trial-2026.11.22'
     bundle=args.output/name
     if bundle.exists(): raise ValueError('Output already exists; use a new output directory.')
     bundle.mkdir()
